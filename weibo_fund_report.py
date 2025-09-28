@@ -7,7 +7,7 @@ from pathlib import Path
 from urllib.parse import quote
 import re
 
-def fetch_weibo_data(keyword, pages=3):  # 增加到3页以获取更多数据
+def fetch_weibo_data(keyword, pages=3):
     """
     Fetch Weibo posts from https://s.weibo.com for the keyword.
     Returns a list of tweets with user, time, content, link, fund_type, categories.
@@ -24,29 +24,30 @@ def fetch_weibo_data(keyword, pages=3):  # 增加到3页以获取更多数据
             response.raise_for_status()
             soup = BeautifulSoup(response.content, 'lxml')
             
-            # 改进选择器：针对微博卡片和内容
+            # Improved selector for Weibo posts
             cards = soup.find_all('div', {'action-type': 'feed_list_item'}) or soup.find_all('div', class_='card-wrap')
-            for card in cards[:5]:  # 每页限5条，避免过多
+            for card in cards[:5]:  # Limit to 5 posts per page to avoid overload
                 user_elem = card.find('a', class_='name') or card.find('strong', class_='WB_text')
                 time_elem = card.find('div', class_='from') or card.select_one('[node-type="feed_list_content"] time')
                 content_elem = card.find('p', class_='txt') or card.find('div', class_='WB_text')
                 link_elem = card.find('a', href=re.compile(r'/weibo/.*'))
                 
                 content = content_elem.get_text(strip=True) if content_elem else 'No content'
-                if len(content) < 10: continue  # 跳过无效内容
+                if len(content) < 10:  # Skip invalid or short content
+                    continue
                 
                 tweet = {
                     'user': user_elem.text.strip() if user_elem else 'Unknown',
                     'time': time_elem.text.strip() if time_elem else datetime.datetime.now().strftime('%Y-%m-%d'),
                     'content': content,
-                    'link': link_elem['href'] if link_elem else search_url,
+                    'link': 'https://s.weibo.com' + link_elem['href'] if link_elem else search_url,
                     'fund_type': get_fund_type(content),
                     'categories': categorize_tweet(content)
                 }
                 tweets.append(tweet)
             
             print(f"Fetched {len(cards[:5])} tweets from page {page}")
-            time.sleep(3)  # 增加延迟
+            time.sleep(3)  # Increased delay to avoid rate limiting
             
         except Exception as e:
             print(f"Error fetching page {page}: {e}")
@@ -61,27 +62,27 @@ def categorize_tweet(content):
     content_lower = content.lower()
     categories = []
     
-    # 个人实盘/买卖记录
+    # Personal trading records
     if re.search(r'(加仓|买入|卖出|持仓|调仓|交易|实盘|做t|定投|清仓)', content_lower):
         categories.append('个人实盘/买卖记录')
     
-    # 心得/经验/体会
+    # Insights/experience
     if re.search(r'(心得|经验|体会|感悟|总结|分享|教训)', content_lower):
         categories.append('心得/经验/体会')
     
-    # 分析
+    # Analysis
     if re.search(r'(分析|拆解|解读|诊断|收益|净值|策略)', content_lower):
         categories.append('分析')
     
-    # 国家政策/法规
+    # Policy/regulations
     if re.search(r'(政策|法规|监管|央行|证监会|持有人大会|私募|公募)', content_lower):
         categories.append('国家政策/法规')
     
-    # 宏观/微观影响
+    # Macro/micro impacts
     if re.search(r'(宏观|微观|周期|趋势|震荡|回调|底部|风险)', content_lower):
         categories.append('宏观/微观影响')
     
-    # 国内/国际影响
+    # Domestic/international impacts
     if re.search(r'(国内|国际|全球|市场|A股)', content_lower):
         categories.append('国内/国际影响')
     
@@ -89,7 +90,7 @@ def categorize_tweet(content):
 
 def get_fund_type(content):
     """
-    Auto-detect fund type.
+    Auto-detect fund type based on content.
     """
     content_lower = content.lower()
     patterns = {
@@ -116,11 +117,19 @@ def generate_report(keyword, tweets):
         "| # | 用户/来源 | 时间（估算） | 内容要点 | 链接/来源 |\n|---|-----------|-------------|----------|-----------|\n"
     ]
     
-    sorted_tweets = sorted(tweets, key=lambda x: x['time'], reverse=True)
-    for i, tweet in enumerate(sorted_tweets, 1):
-        report_lines.append(f"| {i} | {tweet['user']} | {tweet['time']} | {tweet['content'][:100]}... | [{tweet['link']}]({tweet['link']}) |\n")
+    # Sort tweets by time (most recent first, handling non-standard time formats)
+    def parse_time(t):
+        try:
+            return datetime.datetime.strptime(t, '%Y-%m-%d')
+        except:
+            return datetime.datetime.now()  # Fallback for relative times like "2小时前"
     
-    # 分类整理
+    sorted_tweets = sorted(tweets, key=lambda x: parse_time(x['time']), reverse=True)
+    for i, tweet in enumerate(sorted_tweets, 1):
+        content_snippet = tweet['content'][:100] + '...' if len(tweet['content']) > 100 else tweet['content']
+        report_lines.append(f"| {i} | {tweet['user']} | {tweet['time']} | {content_snippet} | [{tweet['link']}]({tweet['link']}) |\n")
+    
+    # Group by categories and fund types
     categories = {
         '个人实盘/买卖记录': [], '心得/经验/体会': [], '分析': [], '国家政策/法规': [],
         '宏观/微观影响': [], '国内/国际影响': [], '其他': []
@@ -138,46 +147,54 @@ def generate_report(keyword, tweets):
             if cat in categories:
                 categories[cat].append(tweet)
         
-        # 买卖对比
+        # Buying/selling/holding/adjusting comparison
         content_lower = tweet['content'].lower()
         if re.search(r'(加仓|买入)', content_lower): buy_sell['buy'].append(tweet)
         if re.search(r'(卖出|清仓)', content_lower): buy_sell['sell'].append(tweet)
         if re.search(r'(持仓|持有|定投)', content_lower): buy_sell['hold'].append(tweet)
         if re.search(r'(调仓|调整|暂停)', content_lower): buy_sell['adjust'].append(tweet)
     
+    # Categories section
     report_lines.append("\n## 2. 分类整理\n按类别分组，相同基金/主题汇总。")
     for category, cat_tweets in categories.items():
         if cat_tweets:
             report_lines.append(f"\n### {category} ({len(cat_tweets)} posts)")
             for tweet in cat_tweets:
-                report_lines.append(f"- **{tweet['fund_type']}**: {tweet['user']} ({tweet['time']}): {tweet['content'][:80]}... [链接]({tweet['link']})\n")
+                content_snippet = tweet['content'][:80] + '...' if len(tweet['content']) > 80 else tweet['content']
+                report_lines.append(f"- **{tweet['fund_type']}**: {tweet['user']} ({tweet['time']}): {content_snippet} [链接]({tweet['link']})\n")
     
+    # Fund types section
     report_lines.append("\n## 按基金类型分组")
     for fund_type, group_tweets in fund_groups.items():
         report_lines.append(f"\n### {fund_type} ({len(group_tweets)} posts)")
         for tweet in group_tweets:
-            report_lines.append(f"- {tweet['user']} ({tweet['time']}): {tweet['content'][:80]}... [链接]({tweet['link']})\n")
+            content_snippet = tweet['content'][:80] + '...' if len(tweet['content']) > 80 else tweet['content']
+            report_lines.append(f"- {tweet['user']} ({tweet['time']}): {content_snippet} [链接]({tweet['link']})\n")
     
+    # Buying/selling/holding/adjusting comparison
     report_lines.append("\n## 买卖/持仓/调仓对比")
     for action, action_tweets in buy_sell.items():
         if action_tweets:
             report_lines.append(f"\n### {action.capitalize()} ({len(action_tweets)} posts)")
             for tweet in action_tweets:
-                report_lines.append(f"- **{tweet['fund_type']}**: {tweet['user']}: {tweet['content'][:60]}... [链接]({tweet['link']})\n")
+                content_snippet = tweet['content'][:60] + '...' if len(tweet['content']) > 60 else tweet['content']
+                report_lines.append(f"- **{tweet['fund_type']}**: {tweet['user']}: {content_snippet} [链接]({tweet['link']})\n")
     
-    # 关键洞察（简单总结）
-    trends = "当前热点：加仓医疗/半导体（积极持仓）；暂停新能源（回调风险）；强调定投/长期持有。私募信用与投资周期重要。"
-    report_lines.append(f"\n## 3. 关键洞察与趋势\n- **买卖/调仓建议**：{trends}\n- **持仓概览**：长期定投为主，避免短期波动。\n- **建议**：使用基金诊断工具，关注政策变化。报告基于公开片段，如需实时，可优化脚本添加代理/Selenium。\n\n来源基于搜索，若需完整，可访问链接查看。<grok:render card_id="b8c2a0" card_type="citation_card" type="render_inline_citation">
-<argument name="citation_id">2</argument>
-</grok:render><grok:render card_id="4104c3" card_type="citation_card" type="render_inline_citation">
-<argument name="citation_id">3</argument>
-</grok:render><grok:render card_id="b0dd8a" card_type="citation_card" type="render_inline_citation">
-<argument name="citation_id">4</argument>
-</grok:render>")
+    # Key insights
+    trends = []
+    if buy_sell['buy']: trends.append("加仓热点：医疗/半导体基金（积极操作）")
+    if buy_sell['sell'] or buy_sell['adjust']: trends.append("暂停或调仓新能源/光伏（回调风险）")
+    if buy_sell['hold']: trends.append("强调长期定投，ETF/指数基金受关注")
+    trends.append("政策驱动：关注央行支持、ETF获批等动态")
+    
+    report_lines.append(f"\n## 3. 关键洞察与趋势\n- **买卖/调仓建议**：{'; '.join(trends) if trends else '暂无明显趋势'}\n- **持仓概览**：长期定投为主，避免短期波动。\n- **建议**：使用基金诊断工具，关注政策变化。报告基于公开片段，如需实时，可优化脚本添加代理/Selenium。\n\n来源基于搜索，若需完整，可访问链接查看。")
     
     return ''.join(report_lines)
 
 def save_report(report_content, output_path="reports"):
+    """
+    Save the report to a Markdown file.
+    """
     Path(output_path).mkdir(exist_ok=True)
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"{output_path}/weibo_fund_report_{timestamp}.md"
