@@ -23,7 +23,7 @@ jobs:
         with:
           python-version: "3.9"
           cache: 'pip'
-
+          
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
@@ -37,39 +37,46 @@ jobs:
 
       # --- 3. 安装并启动 mcp-server-weibo (后台服务) ---
       - name: Install and Start mcp-server-weibo
-        env:
-          WEIBO_COOKIE: ${{ secrets.WEIBO_COOKIE }}  # 确保在 GitHub Secrets 中配置
+        id: start_server
         run: |
           # 全局安装 mcp-server-weibo
+          echo "Run # 全局安装 mcp-server-weibo"
           npm install -g mcp-server-weibo
-          # 启动服务器并在后台运行，添加调试输出
-          nohup mcp-server-weibo --debug > nohup.out 2>&1 &
+          
+          # 启动服务器并在后台运行，将输出重定向到 nohup.out
+          nohup mcp-server-weibo > nohup.out 2>&1 &
           echo "MCP server started in background."
           
-          # 实时监控日志
-          tail -f nohup.out &
-          
-          # **最终修复：延长等待时间并改进健康检查**
-          echo "Waiting for MCP server to be ready (max 60s)..."
-          sleep 5  # 初始等待
-          for i in $(seq 1 60); do
-              # 使用 curl 尝试连接服务，-s 静默模式
+          # **最终修复：循环等待服务就绪，并在失败时立即检查日志**
+          echo "Waiting for MCP server to be ready (max 30s)..."
+          for i in $(seq 1 30); do
+              # -s 静默模式，-f 失败时不输出错误信息
               curl -s http://localhost:3000 > /dev/null
+              
               if [ $? -eq 0 ]; then
                   echo "🎉 MCP Server is up and running after $i seconds."
-                  kill %1  # 停止 tail
                   break
               fi
-              echo "Attempt $i: Server not ready. Waiting 1 second..."
-              sleep 1
-              if [ $i -eq 60 ]; then
+              
+              # 检查日志文件是否有错误，这能捕获立即崩溃
+              if [ -s nohup.out ]; then
                   echo "--------------------------------------------------------"
-                  echo "❌ ERROR: MCP Server failed to start within 60 seconds!"
+                  echo "❌ ERROR: MCP Server log is not empty (crash detected)!"
                   echo "--------------------------------------------------------"
-                  # 打印服务启动日志以诊断 Node.js 崩溃原因
                   echo "Startup Logs (nohup.out):"
                   cat nohup.out
-                  kill %1  # 停止 tail
+                  exit 1
+              fi
+              
+              echo "Attempt $i: Server not ready. Waiting 1 second..."
+              sleep 1
+              
+              if [ $i -eq 30 ]; then
+                  echo "--------------------------------------------------------"
+                  echo "❌ ERROR: MCP Server failed to start within 30 seconds (Timeout)!"
+                  echo "--------------------------------------------------------"
+                  echo "Startup Logs (nohup.out):"
+                  cat nohup.out
                   exit 1
               fi
           done
@@ -93,5 +100,4 @@ jobs:
         if: always()
         run: |
           pkill -f mcp-server-weibo || true
-          kill %1 || true  # 清理 tail 进程
           echo "MCP server stopped."
