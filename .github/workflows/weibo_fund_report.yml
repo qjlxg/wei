@@ -6,6 +6,7 @@ on:
   push:
     paths:
       - 'weibo_fund_report.py'
+      - 'requirements.txt'
       - '.github/workflows/weibo_fund_report.yml'
   workflow_dispatch:
 
