@@ -47,10 +47,10 @@ jobs:
           nohup mcp-server-weibo > nohup.out 2>&1 &
           echo "MCP server started in background."
           
-          # **最终修复：循环等待服务就绪，并在失败时立即检查日志**
+          # **关键诊断逻辑：循环等待服务就绪，并在失败时立即检查日志**
           echo "Waiting for MCP server to be ready (max 30s)..."
           for i in $(seq 1 30); do
-              # -s 静默模式，-f 失败时不输出错误信息
+              # -s 静默模式，尝试连接服务
               curl -s http://localhost:3000 > /dev/null
               
               if [ $? -eq 0 ]; then
@@ -58,7 +58,7 @@ jobs:
                   break
               fi
               
-              # 检查日志文件是否有错误，这能捕获立即崩溃
+              # **如果 nohup.out 有内容（即 Node.js 进程崩溃），立即打印并退出**
               if [ -s nohup.out ]; then
                   echo "--------------------------------------------------------"
                   echo "❌ ERROR: MCP Server log is not empty (crash detected)!"
