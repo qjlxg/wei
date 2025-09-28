@@ -22,27 +22,34 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: "3.9"
-          cache: 'pip' # 启用 pip 依赖缓存
+          cache: 'pip'
 
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          # 通过 requirements.txt 安装所有必要的依赖，包括新增的 webdriver-manager
           pip install -r requirements.txt
-
-      # --- 2. 安装 Chrome 浏览器及其系统依赖 ---
-      - name: Install Chrome and System Dependencies (FIXED)
-        run: |
-          sudo apt-get update
-          # 确保所有 Chrome 运行时依赖都已安装。
-          sudo apt-get install -y google-chrome-stable \
-            libnss3 \
-            libxss1 \
-            libglib2.0-0 \
-            fonts-liberation
           
-      # --- 3. (已移除) 原来的手动安装 ChromeDriver 步骤被移除，由 Python 脚本中的 webdriver-manager 接管 ---
+      # --- 2. 新增：安装 Node.js (用于运行 MCP Server) ---
+      - name: Setup Node.js Environment
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18' # 推荐 Node.js 版本
 
+      # --- 3. 新增：安装并启动 mcp-server-weibo (后台服务) ---
+      - name: Install and Start mcp-server-weibo
+        run: |
+          # 全局安装 mcp-server-weibo
+          npm install -g mcp-server-weibo
+          # 启动服务器并在后台运行，日志输出到 nohup.out
+          nohup mcp-server-weibo > nohup.out 2>&1 &
+          echo "MCP server started in background."
+          
+          # 关键步骤：等待服务启动 (通常需要几秒钟)
+          echo "Waiting for MCP server to initialize..."
+          sleep 10
+          cat nohup.out # 打印日志供调试
+      
+      # --- 4. 运行 Python 脚本 (现在调用本地 API) ---
       - name: Run Weibo fund report script
         env:
           WEIBO_KEYWORD: "基金"
@@ -53,5 +60,12 @@ jobs:
           git config --global user.name "GitHub Action"
           git config --global user.email "action@github.com"
           git add reports/*
-          git commit -m "Add Weibo fund report $(date +'%Y-%m-%d')" || true
-          git push
+          # 仅在有更改时才提交
+          git diff --quiet --exit-code || (git commit -m "Auto: Generate Weibo Fund Report" && git push)
+        
+      # --- 5. 清理后台进程 (可选，但推荐) ---
+      - name: Cleanup Background Processes
+        if: always()
+        run: |
+          pkill -f mcp-server-weibo || true
+          echo "MCP server stopped."
