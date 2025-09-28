@@ -87,24 +87,33 @@ def fetch_weibo_data(keyword, pages=2):
     """
     Fetch Weibo posts from https://s.weibo.com using Selenium to handle dynamic content.
     Returns a list of tweets with user, time, content, link, fund_type, categories, and sentiment.
-    --- 关键优化：使用显式等待并抓取所有帖子，增加调试和反爬处理 ---
     """
     tweets = []
     options = Options()
     
-    # --- 优化 1: 添加反检测参数，移除自动化控制标志 ---
-    options.add_experimental_option("excludeSwitches", ["enable-automation"])
-    options.add_experimental_option('useAutomationExtension', False)
+    # --- 最终增强版：最大化反检测和环境稳定参数 ---
     
-    # --- 优化 2: 保持环境稳定参数 ---
-    options.add_argument('--headless=new') # 使用新的 Headless 模式
+    # 1. 核心无头模式和环境参数
+    options.add_argument('--headless=new') 
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
-    options.add_argument('--window-size=1920,1080') # 显式设置窗口大小
+    options.add_argument('--window-size=1920,1080') 
     options.add_argument('user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36')
     
+    # 2. 强效反检测参数 (Stealth Mode)
+    options.add_experimental_option("excludeSwitches", ["enable-automation"]) # 移除 'Chrome is being controlled...'
+    options.add_experimental_option('useAutomationExtension', False)
+    # 最强反检测：禁用 Blink 引擎的自动化控制标志
+    options.add_argument('--disable-blink-features=AutomationControlled') 
+
+    # 3. 稳定性和日志禁用
+    options.add_argument('--disable-extensions')
+    options.add_argument('--disable-gpu') # 在 Linux 无头环境中禁用 GPU
+    options.add_argument('--log-level=3') # 禁用所有日志输出，减少系统噪音
+    options.add_argument('--mute-audio')
+    
     try:
-        # --- 优化 3: 使用 ChromeDriverManager 自动获取和配置 ChromeDriver 路径 ---
+        # 使用 ChromeDriverManager 自动获取和配置 ChromeDriver 路径
         service = Service(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=options)
         
@@ -113,9 +122,10 @@ def fetch_weibo_data(keyword, pages=2):
         
         for page in range(1, pages + 1):
             search_url = f"https://s.weibo.com/weibo?q={quote(keyword)}&page={page}"
-            # 在循环内部初始化 soup 变量，防止异常时引用未定义的变量
             soup = None 
             try:
+                # 在导航前增加随机延迟
+                time.sleep(random.uniform(0.5, 1.5))
                 driver.get(search_url)
                 
                 # 检查是否遇到验证码页面
@@ -124,13 +134,13 @@ def fetch_weibo_data(keyword, pages=2):
                     print(f"Captcha detected on page {page}, skipping.")
                     continue
                 
-                # --- 优化：使用显式等待，确保帖子容器加载 ---
-                WebDriverWait(driver, 15).until(
-                    EC.presence_of_element_located((By.CSS_SELECTOR, 'div.card, div.card-wrap, div.feed_content'))
+                # 使用显式等待，确保帖子容器加载 (等待时间稍长，提高稳定性)
+                WebDriverWait(driver, 20).until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, 'div.card-wrap[action-type="feed_list_item"]'))
                 )
                 
-                # 随机延时模拟人类行为
-                time.sleep(random.uniform(1, 3))
+                # 随机延时模拟人类行为，等待 JS 渲染完成
+                time.sleep(random.uniform(2, 4))
                 
                 soup = BeautifulSoup(driver.page_source, 'lxml')
                 
@@ -143,10 +153,16 @@ def fetch_weibo_data(keyword, pages=2):
                 print(f"Found {len(cards)} cards on page {page}")
                 
                 for card in cards:
-                    user_elem = card.find('a', class_='name') or card.find('strong', class_='WB_text')
-                    time_elem = card.find('div', class_='from') or card.select_one('[node-type="feed_list_content"] time')
+                    # 优先使用最精确的选择器
+                    user_elem = card.find('a', class_='name') 
+                    time_elem = card.find('div', class_='from') 
                     link_elem = card.find('a', href=re.compile(r'/weibo/.*'))
-                    content_elem = card.find('p', class_='txt') or card.find('div', class_='WB_text')
+                    content_elem = card.find('p', class_='txt', attrs={'node-type': 'feed_list_content'})
+                    
+                    # 后备选择器
+                    if not user_elem: user_elem = card.find('strong', class_='WB_text')
+                    if not time_elem: time_elem = card.select_one('[node-type="feed_list_content"] time')
+                    if not content_elem: content_elem = card.find('div', class_='WB_text')
                     
                     content = content_elem.get_text(strip=True) if content_elem else 'No content'
                     if len(content) < 10:  # Skip invalid content
@@ -171,10 +187,12 @@ def fetch_weibo_data(keyword, pages=2):
                 print(f"Fetched {len(tweets)} tweets from page {page}")
                 
             except Exception as e:
-                # --- 修复：防止引用未定义的 'soup' 变量导致的错误 ---
                 print(f"Error fetching page {page}: {str(e)}")
                 if soup is not None:
-                    print(soup.prettify()[:1000])  # 打印部分 HTML 调试
+                    # 打印部分 HTML 调试，但仅限于前1000个字符
+                    print("--- HTML Snippet for Debugging ---")
+                    print(soup.prettify()[:1000])  
+                    print("--- End HTML Snippet ---")
                 else:
                     print("Could not retrieve page source for debugging.")
                 continue
