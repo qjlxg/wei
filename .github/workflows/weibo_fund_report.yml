@@ -1,103 +1,32 @@
-name: Weibo Fund Report Generator
+name: Scrape Weibo Fund Posts
 
 on:
-  schedule:
-    - cron: "0 0 * * *"  # 每天00:00 UTC（对应上海时间08:00 CST）
   push:
-    paths:
-      - 'weibo_fund_report.py'
-      - '.github/workflows/weibo_fund_report.yml'
-      - 'requirements.txt'
-  workflow_dispatch:
+    branches: [ main ]
 
 jobs:
-  generate-report:
+  scrape:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
+    - name: Checkout code
+      uses: actions/checkout@v4
 
-      # --- 1. 设置 Python 并缓存依赖 ---
-      - name: Set up Python and Cache Dependencies
-        uses: actions/setup-python@v4
-        with:
-          python-version: "3.9"
-          cache: 'pip'
-          
-      - name: Install Python dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          
-      # --- 2. 安装 Node.js (用于运行 MCP Server) ---
-      - name: Setup Node.js Environment
-        uses: actions/setup-node@v3
-        with:
-          node-version: '18'
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
 
-      # --- 3. 安装并启动 mcp-server-weibo (后台服务) ---
-      - name: Install and Start mcp-server-weibo
-        id: start_server
-        run: |
-          # 全局安装 mcp-server-weibo
-          echo "Run # 全局安装 mcp-server-weibo"
-          npm install -g mcp-server-weibo
-          
-          # 启动服务器并在后台运行，将输出重定向到 nohup.out
-          nohup mcp-server-weibo > nohup.out 2>&1 &
-          echo "MCP server started in background."
-          
-          # **关键诊断逻辑：循环等待服务就绪，并在失败时立即检查日志**
-          echo "Waiting for MCP server to be ready (max 30s)..."
-          for i in $(seq 1 30); do
-              # -s 静默模式，尝试连接服务
-              curl -s http://localhost:3000 > /dev/null
-              
-              if [ $? -eq 0 ]; then
-                  echo "🎉 MCP Server is up and running after $i seconds."
-                  break
-              fi
-              
-              # **如果 nohup.out 有内容（即 Node.js 进程崩溃），立即打印并退出**
-              if [ -s nohup.out ]; then
-                  echo "--------------------------------------------------------"
-                  echo "❌ ERROR: MCP Server log is not empty (crash detected)!"
-                  echo "--------------------------------------------------------"
-                  echo "Startup Logs (nohup.out):"
-                  cat nohup.out
-                  exit 1
-              fi
-              
-              echo "Attempt $i: Server not ready. Waiting 1 second..."
-              sleep 1
-              
-              if [ $i -eq 30 ]; then
-                  echo "--------------------------------------------------------"
-                  echo "❌ ERROR: MCP Server failed to start within 30 seconds (Timeout)!"
-                  echo "--------------------------------------------------------"
-                  echo "Startup Logs (nohup.out):"
-                  cat nohup.out
-                  exit 1
-              fi
-          done
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install requests beautifulsoup4
 
-      # --- 4. 运行 Python 脚本 (现在调用本地 API) ---
-      - name: Run Weibo fund report script
-        env:
-          WEIBO_KEYWORD: "基金"
-        run: python weibo_fund_report.py
+    - name: Run scraper
+      run: python weibo_scraper.py
 
-      - name: Commit and push report
-        run: |
-          git config --global user.name "GitHub Action"
-          git config --global user.email "action@github.com"
-          git add reports/*
-          # 仅在有更改时才提交
-          git diff --quiet --exit-code || (git commit -m "Auto: Generate Weibo Fund Report (MCP)" && git push)
-        
-      # --- 5. 清理后台进程 ---
-      - name: Cleanup Background Processes
-        if: always()
-        run: |
-          pkill -f mcp-server-weibo || true
-          echo "MCP server stopped."
+    - name: Upload results
+      uses: actions/upload-artifact@v4
+      with:
+        name: weibo-results
+        path: weibo_results.json
