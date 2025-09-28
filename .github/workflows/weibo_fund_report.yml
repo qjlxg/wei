@@ -29,26 +29,42 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           
-      # --- 2. 新增：安装 Node.js (用于运行 MCP Server) ---
+      # --- 2. 安装 Node.js (用于运行 MCP Server) ---
       - name: Setup Node.js Environment
         uses: actions/setup-node@v3
         with:
-          node-version: '18' # 推荐 Node.js 版本
+          node-version: '18'
 
-      # --- 3. 新增：安装并启动 mcp-server-weibo (后台服务) ---
+      # --- 3. 安装并启动 mcp-server-weibo (后台服务) ---
       - name: Install and Start mcp-server-weibo
         run: |
           # 全局安装 mcp-server-weibo
           npm install -g mcp-server-weibo
-          # 启动服务器并在后台运行，日志输出到 nohup.out
+          # 启动服务器并在后台运行
           nohup mcp-server-weibo > nohup.out 2>&1 &
           echo "MCP server started in background."
           
-          # 关键步骤：等待服务启动 (通常需要几秒钟)
-          echo "Waiting for MCP server to initialize..."
-          sleep 10
-          cat nohup.out # 打印日志供调试
-      
+          # **关键修复：循环等待服务就绪 (最长等待 20 秒)**
+          echo "Waiting for MCP server to initialize (max 20s)..."
+          for i in $(seq 1 20); do
+              # 使用 curl 尝试连接服务，-s 静默模式，-f 失败时退出
+              curl -s http://localhost:3000 > /dev/null
+              if [ $? -eq 0 ]; then
+                  echo "🎉 MCP Server is up and running after $i seconds."
+                  break
+              fi
+              echo "Attempt $i: Server not ready. Waiting 1 second..."
+              sleep 1
+              if [ $i -eq 20 ]; then
+                  echo "--------------------------------------------------------"
+                  echo "❌ ERROR: MCP Server failed to start within 20 seconds!"
+                  echo "--------------------------------------------------------"
+                  echo "Startup Logs (nohup.out):"
+                  cat nohup.out
+                  exit 1
+              fi
+          done
+
       # --- 4. 运行 Python 脚本 (现在调用本地 API) ---
       - name: Run Weibo fund report script
         env:
@@ -61,9 +77,9 @@ jobs:
           git config --global user.email "action@github.com"
           git add reports/*
           # 仅在有更改时才提交
-          git diff --quiet --exit-code || (git commit -m "Auto: Generate Weibo Fund Report" && git push)
+          git diff --quiet --exit-code || (git commit -m "Auto: Generate Weibo Fund Report (MCP)" && git push)
         
-      # --- 5. 清理后台进程 (可选，但推荐) ---
+      # --- 5. 清理后台进程 ---
       - name: Cleanup Background Processes
         if: always()
         run: |
