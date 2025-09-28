@@ -1,14 +1,25 @@
 name: Fund News Scraper
 
 on:
+  # 1. 定时触发 (每天北京时间 08:00)
+  # UTC 00:00 对应 北京时间 (UTC+8) 08:00
   schedule:
-    - cron: '0 0 * * *'  # 每天UTC 00:00运行（北京时间08:00）
+    - cron: '0 0 * * *'  
+  # 2. 代码 push 触发 (在以下文件或文件夹有改动时自动运行)
+  push:
+    paths:
+      - 'fund_news_scraper.py'
+      - '.github/workflows/weibo_fund_report.yml'
   workflow_dispatch:  # 支持手动触发
 
 jobs:
   scrape:
     runs-on: ubuntu-latest
     
+    # 设置工作流的默认时区为上海，用于在日志中打印正确的时间
+    env:
+      TZ: Asia/Shanghai
+
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
@@ -21,14 +32,16 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        # 修复：将 dateutil 替换为 python-dateutil，并确保安装 pytz
+      
         pip install requests beautifulsoup4 python-dateutil pytz
         
     - name: Run fund news scraper
       run: |
+        # 脚本内部的时间打印会使用 TZ 环境变量设置的时区
         python fund_news_scraper.py
         
     - name: Commit and push changes
+      # 仅在 fund_news.md 文件有实际变化时才提交
       run: |
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
