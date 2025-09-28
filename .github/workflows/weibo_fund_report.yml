@@ -20,13 +20,13 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install requests beautifulsoup4
+        pip install requests beautifulsoup4 weibo-scraper
 
     - name: Run scraper
-      run: python weibo_scraper.py
+      run: python weibo_fund_search.py
 
     - name: Upload results
       uses: actions/upload-artifact@v4
       with:
-        name: weibo-results
-        path: weibo_results.json
+        name: weibo-fund-results
+        path: fund_tweets.json
