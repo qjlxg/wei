@@ -1,0 +1,55 @@
+name: 微博基金话题报告生成器
+
+# 工作流的触发条件
+on:
+  # 每日定时运行 (例如：每日 UTC 时间 00:00，相当于北京时间上午 8 点)
+  schedule:
+    - cron: '0 0 * * *'
+  # 允许手动触发，并提供一个输入框来定义关键词
+  workflow_dispatch:
+    inputs:
+      keywords:
+        description: '要搜索的关键词 (用逗号分隔)。如果留空，将使用 main.py 中的默认基金主题列表。'
+        required: false
+        # 默认关键词列表，确保与 main.py 中的默认列表保持一致
+        default: '基金'
+
+jobs:
+  generate_report:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 📝 检出代码 (Checkout repository)
+      uses: actions/checkout@v4
+      # 需要拉取最新的提交，以便 git-auto-commit-action 能够成功提交新的报告
+      with:
+        fetch-depth: 0
+
+    - name: 🐍 设置 Python 环境 (Setup Python)
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+
+    - name: ⚙️ 安装 weibo-scraper 库 (Install dependencies)
+      run: |
+        python -m pip install --upgrade pip
+        pip install weibo-scraper
+
+    # 设置 KEYWORDS_ENV 环境变量
+    - name: 🌍 运行微博搜索脚本 (Run script)
+      env:
+        # 优先使用手动触发时的输入值，否则使用默认值列表
+        KEYWORDS_ENV: ${{ github.event.inputs.keywords || '基金' }}
+      run: |
+        echo "使用的关键词: $KEYWORDS_ENV"
+        python main.py
+
+    - name: 💾 自动提交生成的报告 (Commit report)
+      # 提交 reports/report.md 文件
+      uses: stefanzweifel/git-auto-commit-action@v5
+      with:
+        commit_message: "🤖 自动更新: 微博基金话题报告 (reports/report.md)"
+        files: "reports/report.md"
+        # 设置提交用户名和邮箱
+        commit_user_name: 'GitHub Actions Bot'
+        commit_user_email: 'actions@github.com'
