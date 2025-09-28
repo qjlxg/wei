@@ -14,7 +14,7 @@ from snownlp import SnowNLP
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.by import By
-
+import random
 
 # --- 辅助函数：提取热门基金类型 ---
 def get_top_fund_types(tweets, n=2):
@@ -83,66 +83,87 @@ def fetch_weibo_data(keyword, pages=2):
     """
     Fetch Weibo posts from https://s.weibo.com using Selenium to handle dynamic content.
     Returns a list of tweets with user, time, content, link, fund_type, categories, and sentiment.
-    --- 关键优化：使用显式等待并抓取所有帖子 ---
+    --- 关键优化：使用显式等待并抓取所有帖子，增加调试和反爬处理 ---
     """
     tweets = []
     options = Options()
     options.add_argument('--headless')
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
-    options.add_argument('user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36')
+    options.add_argument('user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36')
     
-    driver = webdriver.Chrome(options=options)
-    
-    for page in range(1, pages + 1):
-        search_url = f"https://s.weibo.com/weibo?q={quote(keyword)}&page={page}"
-        try:
-            driver.get(search_url)
-            
-            # --- 优化：使用显式等待代替 time.sleep() ---
-            # 等待主要的微博列表容器加载完成，最多等待 15 秒
-            WebDriverWait(driver, 15).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, 'div.card-wrap'))
-            )
-            
-            soup = BeautifulSoup(driver.page_source, 'lxml')
-            
-            # 抓取页面上的所有帖子，不限制数量
-            cards = soup.find_all('div', {'action-type': 'feed_list_item'}) or soup.find_all('div', class_='card-wrap')
-            
-            for card in cards:
-                user_elem = card.find('a', class_='name') or card.find('strong', class_='WB_text')
-                time_elem = card.find('div', class_='from') or card.select_one('[node-type="feed_list_content"] time')
-                link_elem = card.find('a', href=re.compile(r'/weibo/.*'))
-                content_elem = card.find('p', class_='txt') or card.find('div', class_='WB_text')
+    try:
+        driver = webdriver.Chrome(options=options)
+        print(f"Chrome Version: {driver.capabilities['browserVersion']}")
+        print(f"ChromeDriver Version: {driver.capabilities['chrome']['chromedriverVersion']}")
+        
+        for page in range(1, pages + 1):
+            search_url = f"https://s.weibo.com/weibo?q={quote(keyword)}&page={page}"
+            try:
+                driver.get(search_url)
                 
-                content = content_elem.get_text(strip=True) if content_elem else 'No content'
-                if len(content) < 10:  # Skip invalid content
+                # 检查是否遇到验证码页面
+                captcha_elements = driver.find_elements(By.CSS_SELECTOR, 'div.captcha')
+                if captcha_elements:
+                    print(f"Captcha detected on page {page}, skipping.")
                     continue
                 
-                raw_time = time_elem.text.strip() if time_elem else datetime.datetime.now().strftime('%Y-%m-%d')
-                absolute_time = parse_absolute_time(raw_time)
-                sentiment_score = SnowNLP(content).sentiments
+                # --- 优化：使用显式等待，确保帖子容器加载 ---
+                WebDriverWait(driver, 15).until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, 'div.card, div.card-wrap, div.feed_content'))
+                )
                 
-                tweet = {
-                    'user': user_elem.text.strip() if user_elem else 'Unknown',
-                    'time': raw_time,
-                    'absolute_time': absolute_time.strftime('%Y-%m-%d %H:%M:%S'),
-                    'content': content,
-                    'link': 'https://s.weibo.com' + link_elem['href'] if link_elem else search_url,
-                    'fund_type': get_fund_type(content),
-                    'categories': categorize_tweet(content),
-                    'sentiment': round(sentiment_score, 4)
-                }
-                tweets.append(tweet)
-            
-            print(f"Fetched {len(cards)} tweets from page {page}")
-            
-        except Exception as e:
-            print(f"Error fetching page {page}: {e}")
-            continue
+                # 随机延时模拟人类行为
+                time.sleep(random.uniform(1, 3))
+                
+                soup = BeautifulSoup(driver.page_source, 'lxml')
+                
+                # 尝试多种选择器以适应页面变化
+                cards = (soup.find_all('div', {'action-type': 'feed_list_item'}) or 
+                         soup.find_all('div', class_='card-wrap') or 
+                         soup.find_all('div', class_='card') or 
+                         soup.find_all('div', class_='feed_content'))
+                
+                print(f"Found {len(cards)} cards on page {page}")
+                
+                for card in cards:
+                    user_elem = card.find('a', class_='name') or card.find('strong', class_='WB_text')
+                    time_elem = card.find('div', class_='from') or card.select_one('[node-type="feed_list_content"] time')
+                    link_elem = card.find('a', href=re.compile(r'/weibo/.*'))
+                    content_elem = card.find('p', class_='txt') or card.find('div', class_='WB_text')
+                    
+                    content = content_elem.get_text(strip=True) if content_elem else 'No content'
+                    if len(content) < 10:  # Skip invalid content
+                        continue
+                    
+                    raw_time = time_elem.text.strip() if time_elem else datetime.datetime.now().strftime('%Y-%m-%d')
+                    absolute_time = parse_absolute_time(raw_time)
+                    sentiment_score = SnowNLP(content).sentiments
+                    
+                    tweet = {
+                        'user': user_elem.text.strip() if user_elem else 'Unknown',
+                        'time': raw_time,
+                        'absolute_time': absolute_time.strftime('%Y-%m-%d %H:%M:%S'),
+                        'content': content,
+                        'link': 'https://s.weibo.com' + link_elem['href'] if link_elem else search_url,
+                        'fund_type': get_fund_type(content),
+                        'categories': categorize_tweet(content),
+                        'sentiment': round(sentiment_score, 4)
+                    }
+                    tweets.append(tweet)
+                
+                print(f"Fetched {len(tweets)} tweets from page {page}")
+                
+            except Exception as e:
+                print(f"Error fetching page {page}: {str(e)}")
+                print(soup.prettify()[:1000])  # 打印部分 HTML 调试
+                continue
+        
+    except Exception as e:
+        print(f"Failed to initialize WebDriver: {str(e)}")
+    finally:
+        driver.quit()
     
-    driver.quit()
     return tweets
 
 def categorize_tweet(content):
