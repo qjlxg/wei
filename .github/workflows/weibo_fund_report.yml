@@ -44,18 +44,27 @@ jobs:
           nohup mcp-server-weibo > nohup.out 2>&1 &
           echo "MCP server started in background."
           
-          # **关键修复：使用 curl 的内置重试机制进行健康检查 (更可靠)**
+          # **最终修复：使用手动循环和日志打印进行健康检查**
           echo "Waiting for MCP server to be ready (max 30s)..."
-          curl -s --fail --show-error --retry 30 --retry-delay 1 --retry-connrefused http://localhost:3000/
-          if [ $? -ne 0 ]; then
-              echo "--------------------------------------------------------"
-              echo "❌ ERROR: MCP Server failed to start within 30 seconds!"
-              echo "--------------------------------------------------------"
-              echo "Startup Logs (nohup.out):"
-              cat nohup.out
-              exit 1
-          fi
-          echo "🎉 MCP Server is up and running."
+          for i in $(seq 1 30); do
+              # 使用 curl 尝试连接服务，-s 静默模式
+              curl -s http://localhost:3000 > /dev/null
+              if [ $? -eq 0 ]; then
+                  echo "🎉 MCP Server is up and running after $i seconds."
+                  break
+              fi
+              echo "Attempt $i: Server not ready. Waiting 1 second..."
+              sleep 1
+              if [ $i -eq 30 ]; then
+                  echo "--------------------------------------------------------"
+                  echo "❌ ERROR: MCP Server failed to start within 30 seconds!"
+                  echo "--------------------------------------------------------"
+                  # 打印服务启动日志以诊断 Node.js 崩溃原因
+                  echo "Startup Logs (nohup.out):"
+                  cat nohup.out
+                  exit 1
+              fi
+          done
 
       # --- 4. 运行 Python 脚本 (现在调用本地 API) ---
       - name: Run Weibo fund report script
