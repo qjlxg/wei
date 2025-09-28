@@ -15,6 +15,10 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.by import By
 import random
+# --- 新增 WebDriver 自动管理工具 ---
+from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.chrome.service import Service
+
 
 # --- 辅助函数：提取热门基金类型 ---
 def get_top_fund_types(tweets, n=2):
@@ -87,14 +91,23 @@ def fetch_weibo_data(keyword, pages=2):
     """
     tweets = []
     options = Options()
-    options.add_argument('--headless=new') # 优化: 使用新的 Headless 模式
+    
+    # --- 优化 1: 添加反检测参数，移除自动化控制标志 ---
+    options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    options.add_experimental_option('useAutomationExtension', False)
+    
+    # --- 优化 2: 保持环境稳定参数 ---
+    options.add_argument('--headless=new') # 使用新的 Headless 模式
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
-    options.add_argument('--window-size=1920,1080') # 优化: 显式设置窗口大小
+    options.add_argument('--window-size=1920,1080') # 显式设置窗口大小
     options.add_argument('user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36')
     
     try:
-        driver = webdriver.Chrome(options=options)
+        # --- 优化 3: 使用 ChromeDriverManager 自动获取和配置 ChromeDriver 路径 ---
+        service = Service(ChromeDriverManager().install())
+        driver = webdriver.Chrome(service=service, options=options)
+        
         print(f"Chrome Version: {driver.capabilities['browserVersion']}")
         print(f"ChromeDriver Version: {driver.capabilities['chrome']['chromedriverVersion']}")
         
@@ -169,7 +182,8 @@ def fetch_weibo_data(keyword, pages=2):
     except Exception as e:
         print(f"Failed to initialize WebDriver: {str(e)}")
     finally:
-        driver.quit()
+        if 'driver' in locals():
+             driver.quit()
     
     return tweets
 
@@ -243,6 +257,10 @@ def generate_report(keyword, tweets):
     """
     timestamp = datetime.datetime.now().strftime("%Y年%m月%d日 %H:%M:%S")
     
+    # 避免除以零错误
+    if not tweets:
+        return f"# 基金相关微博内容报告\n\n**生成时间**：{timestamp}\n**关键词**：{keyword}\n**数据来源**：未抓取到任何数据。\n\n## 关键洞察与趋势\n- **建议**：请检查爬虫日志。\n"
+        
     avg_sentiment = sum(t['sentiment'] for t in tweets) / len(tweets)
     sentiment_label = "积极" if avg_sentiment > 0.6 else ("消极" if avg_sentiment < 0.4 else "中性")
     top_keywords = extract_keywords(tweets)
