@@ -30,16 +30,15 @@ jobs:
           # 通过 requirements.txt 安装所有必要的依赖
           pip install -r requirements.txt
 
-      # --- 2. 安装 Chrome 和所有系统依赖 (修复浏览器崩溃的关键步骤) ---
-      - name: Install Chrome and System Dependencies
+      # --- 2. 安装 Chrome 和所有系统依赖 (修复：移除过时依赖) ---
+      - name: Install Chrome and System Dependencies (FIXED)
         run: |
           sudo apt-get update
-          # 确保所有 Chrome 运行时依赖都已安装，避免无头模式下的崩溃
+          # 确保所有 Chrome 运行时依赖都已安装。
+          # 移除 libappindicator1 和 libindicator7 以解决 'Unable to locate package' 错误。
           sudo apt-get install -y google-chrome-stable \
             libnss3 \
             libxss1 \
-            libappindicator1 \
-            libindicator7 \
             libglib2.0-0 \
             fonts-liberation
           
