@@ -27,34 +27,21 @@ jobs:
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          # 通过 requirements.txt 安装所有必要的依赖
+          # 通过 requirements.txt 安装所有必要的依赖，包括新增的 webdriver-manager
           pip install -r requirements.txt
 
-      # --- 2. 安装 Chrome 和所有系统依赖 (修复：移除过时依赖) ---
+      # --- 2. 安装 Chrome 浏览器及其系统依赖 ---
       - name: Install Chrome and System Dependencies (FIXED)
         run: |
           sudo apt-get update
           # 确保所有 Chrome 运行时依赖都已安装。
-          # 移除 libappindicator1 和 libindicator7 以解决 'Unable to locate package' 错误。
           sudo apt-get install -y google-chrome-stable \
             libnss3 \
             libxss1 \
             libglib2.0-0 \
             fonts-liberation
           
-      # --- 3. 安装并缓存 ChromeDriver ---
-      # 临时禁用 ChromeDriver 缓存，确保每次都安装最新匹配版本，避免版本冲突。
-      #- name: Cache ChromeDriver
-      #  id: cache-chromedriver
-      #  uses: actions/cache@v3
-      #  with:
-      #    path: /usr/local/bin/chromedriver 
-      #    key: ${{ runner.os }}-chromedriver-3
-
-      - name: Install ChromeDriver
-        uses: nanasess/setup-chromedriver@v2
-        # if 语句被移除，强制每次都安装/检查版本
-        # if: steps.cache-chromedriver.outputs.cache-hit != 'true' 
+      # --- 3. (已移除) 原来的手动安装 ChromeDriver 步骤被移除，由 Python 脚本中的 webdriver-manager 接管 ---
 
       - name: Run Weibo fund report script
         env:
