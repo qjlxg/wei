@@ -1,0 +1,36 @@
+name: Weibo Fund Report Generator
+
+on:
+  schedule:
+    - cron: "0 0 * * *"  # 每天凌晨运行
+  workflow_dispatch:      # 支持手动触发
+
+jobs:
+  generate-report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.9"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests beautifulsoup4 lxml
+
+      - name: Run Weibo fund report script
+        env:
+          WEIBO_KEYWORD: "基金"  # 固定关键词
+        run: python weibo_fund_report.py
+
+      - name: Commit and push report
+        run: |
+          git config --global user.name "GitHub Action"
+          git config --global user.email "action@github.com"
+          git add reports/*
+          git commit -m "Add Weibo fund report $(date +'%Y-%m-%d')" || echo "No changes to commit"
+          git push
