@@ -7,23 +7,30 @@ import xml.etree.ElementTree as ET
 from dateutil import parser
 import pytz
 
-# --- 【核心配置】分析规则库，可根据新的新闻主题扩展 ---
-# 1. 投资线索 (人物/机构 -> 标的/策略)
+# --- 【核心配置】分析规则库：通用、可扩展的分析逻辑 ---
+
+# 1. 投资线索 (标的/策略 -> 总结)
 CLUES_MAP = {
-    # 规则: 正则表达式用于匹配新闻内容（标题+摘要）
-    r'李蓓|半夏|中证500|IC': '半夏李蓓/中证500/科技成长策略',
-    r'国金证券|四中全会|策略月报': '国金证券/四中全会主题策略',
-    r'华安证券|成长产业|AI|军工': '华安证券/AI/军工/新成长配置',
-    r'开源证券|金股策略|科技|港股': '开源证券/AI+自主可控科技主线',
+    # 策略通用词：识别任何表达明确买入/看好/配置意图的文章 (强化通用词，抓住行为)
+    r'看好|建议配置|策略主线|聚焦|布局|推荐|金股|实盘': '【通用策略信号】识别到明确的配置建议或策略主线',
+    
+    # 宏观策略与周期
+    r'宏观|策略报告|周期|四中全会|十五五': '【宏观策略信号】宏观或周期性主题报告',
+    
+    # 特指信号：保留高价值人物/机构的关键词，但其定位是“信号”，而非特定人
+    r'李蓓|半夏|中证500|IC': '私募观点：中证500/科技成长策略',
+    r'华安证券|成长产业|AI|军工': '券商观点：AI/军工/新成长产业链配置',
+    r'开源证券|金股策略|科技|港股': '券商观点：AI+自主可控科技主线',
     r'ETF|股票ETF|百亿俱乐部|吸金': '资金流向/股票ETF/吸金赛道',
-    r'贵金属|黄金|避险': '资产对冲/避险配置',
-    r'均衡配置|光伏|化工|农业|有色|银行': '均衡策略/低估值轮动配置',
+    r'贵金属|黄金|避险': '资产对冲/避险配置 (贵金属)',
+    r'均衡配置|光伏|化工|农业|有色|银行': '低位/均衡板块配置建议',
 }
 
 # 2. 经验教训 (行为/结果 -> 风险/教训)
 LESSONS_MAP = {
-    r'跑输大盘|未能满仓|红利板块': '经验教训：新基金建仓策略与市场错配风险',
-    r'基金经理|涉赌|免职|内控': '风险提示：基金公司内控和经理道德风险',
+    r'警惕|风险|教训|涉赌|跑输|内控': '【通用风险信号】识别到行业风险或负面经验教训',
+    r'跑输大盘|未能满仓|红利板块': '新基金建仓策略与市场错配风险',
+    r'基金经理|涉赌|免职': '基金经理道德风险与公司内控警示',
     r'机构大举增持|主动权益基金': '机构行为：主动权益基金仍是配置重点',
 }
 
@@ -159,11 +166,11 @@ def fetch_web_page(url: str, source_name: str, selector: str, limit: int = 15) -
     return []
 
 
-# --- 【核心】新闻分析函数：基于规则匹配 ---
+# --- 【核心】新闻分析函数：基于规则匹配（侧重通用性） ---
 def analyze_news(news_items: List[Dict]) -> Dict:
     """
-    基于关键词和规则，从新闻列表中提取投资线索和经验教训。
-    代码的核心是遍历每条新闻，尝试匹配预定义的正则模式（CLUES_MAP, LESSONS_MAP, TRENDS_MAP）。
+    基于关键词和规则库，从新闻列表中提取投资线索和经验教训。
+    逻辑简化为：只要匹配到任意一个通用或特定的规则，就提炼该信号。
     """
     analysis = {
         'investment_clues': [],
@@ -171,13 +178,11 @@ def analyze_news(news_items: List[Dict]) -> Dict:
         'industry_trends': []
     }
 
-    # 记录已匹配到的分析点，避免重复
     seen_clues = set()
     seen_lessons = set()
     seen_trends = set()
 
     for item in news_items:
-        # 将标题和摘要合并成一个长字符串进行匹配
         text = item['title'] + item['summary']
         
         # 1. 匹配投资线索
@@ -271,11 +276,11 @@ sources = [
     }
 ]
 
-def generate_markdown(news_items: List[Dict], analysis_report: str) -> str:
+def generate_markdown(news_items: List[Dict], analysis_report: str, timestamp_str: str) -> str:
     """
     生成Markdown。在新闻列表前插入分析报告。
     """
-    md_content = f"# 基金新闻聚合 ({datetime.now().strftime('%Y-%m-%d %H:%M:%S')})\n\n"
+    md_content = f"# 基金新闻聚合 ({timestamp_str})\n\n"
     configured_sources = list(set([s['name'].split('-')[0] for s in globals().get('sources', [])]))
     source_names = "、".join(configured_sources)
     md_content += f"来源：{source_names}（关键词：基金/实盘/观点/经验/推荐/策略）。总计 {len(news_items)} 条。\n"
@@ -294,14 +299,26 @@ def generate_markdown(news_items: List[Dict], analysis_report: str) -> str:
 
 def main():
     """主执行函数，协调抓取、分析、去重和文件生成。"""
+    
+    # --- 关键修改 1: 获取带日期时间戳的文件名 ---
+    # 使用当前北京时间作为时间戳，用于命名和报告标题
+    tz = pytz.timezone('Asia/Shanghai')
+    now = datetime.now(tz)
+    timestamp_str = now.strftime('%Y-%m-%d %H:%M:%S')
+    # 文件名使用 YYYYMMDD 格式，避免覆盖
+    date_str = now.strftime('%Y%m%d') 
+    output_file = f'fund_news_{date_str}.md'
+    # --------------------------------------------------
+    
     all_news = []
-    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 开始抓取基金新闻 (已扩展关键词和深度)...")
+    print(f"[{timestamp_str}] 开始抓取基金新闻 (已扩展关键词和深度)...")
     
     for source in sources:
         print(f"处理来源: {source['name']} ({source['url']})")
         if source['type'] == 'rss':
             items = fetch_rss_feed(source['url'], source['name'], limit=15)
         else:
+            # 这里的 source_name 变量需要从 source 字典中获取
             items = fetch_web_page(source['url'], source['name'], source.get('selector'), limit=15)
         all_news.extend(items)
     
@@ -312,6 +329,7 @@ def main():
         if news['link'] and news['link'] != 'N/A' and news['link'] not in seen_links:
             seen_links.add(news['link'])
             unique_news.append(news)
+        # 如果链接不可用，则根据标题和来源进行去重
         elif news['link'] == 'N/A' and (news['title'], news['source']) not in seen_links:
              seen_links.add((news['title'], news['source']))
              unique_news.append(news)
@@ -321,11 +339,9 @@ def main():
         time_str = item['pubDate']
         if time_str and time_str != 'N/A':
             try:
-                # 尝试解析为 datetime 对象
                 return datetime.strptime(time_str, '%Y-%m-%d %H:%M:%S')
             except ValueError:
                 pass
-        # 无法解析的排在最后
         return datetime(1900, 1, 1)
 
     unique_news.sort(key=sort_key, reverse=True)
@@ -335,8 +351,9 @@ def main():
     analysis_report_md = generate_analysis_report(analysis_results, len(unique_news))
     
     # 生成MD
-    md_content = generate_markdown(unique_news, analysis_report_md)
-    output_file = 'fund_news.md'
+    # 关键修改 2: 传入 timestamp_str 到 generate_markdown
+    md_content = generate_markdown(unique_news, analysis_report_md, timestamp_str)
+    
     with open(output_file, 'w', encoding='utf-8') as f:
         f.write(md_content)
     
