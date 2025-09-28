@@ -43,16 +43,18 @@ jobs:
             fonts-liberation
           
       # --- 3. 安装并缓存 ChromeDriver ---
-      - name: Cache ChromeDriver
-        id: cache-chromedriver
-        uses: actions/cache@v3
-        with:
-          path: /usr/local/bin/chromedriver 
-          key: ${{ runner.os }}-chromedriver-3
+      # 临时禁用 ChromeDriver 缓存，确保每次都安装最新匹配版本，避免版本冲突。
+      #- name: Cache ChromeDriver
+      #  id: cache-chromedriver
+      #  uses: actions/cache@v3
+      #  with:
+      #    path: /usr/local/bin/chromedriver 
+      #    key: ${{ runner.os }}-chromedriver-3
 
       - name: Install ChromeDriver
         uses: nanasess/setup-chromedriver@v2
-        if: steps.cache-chromedriver.outputs.cache-hit != 'true' 
+        # if 语句被移除，强制每次都安装/检查版本
+        # if: steps.cache-chromedriver.outputs.cache-hit != 'true' 
 
       - name: Run Weibo fund report script
         env:
