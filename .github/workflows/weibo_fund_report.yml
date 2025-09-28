@@ -7,7 +7,7 @@ on:
     paths:
       - 'weibo_fund_report.py'
       - '.github/workflows/weibo_fund_report.yml'
-      - 'requirements.txt' # 监听依赖文件改动
+      - 'requirements.txt'
   workflow_dispatch:
 
 jobs:
@@ -17,7 +17,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      # --- 1. 设置 Python 并缓存依赖（依赖于 requirements.txt）---
+      # --- 1. 设置 Python 并缓存依赖 ---
       - name: Set up Python and Cache Dependencies
         uses: actions/setup-python@v4
         with:
@@ -27,30 +27,32 @@ jobs:
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          # 通过 requirements.txt 安装所有必要的依赖，包括 jieba 和 snownlp
+          # 通过 requirements.txt 安装所有必要的依赖
           pip install -r requirements.txt
 
-      # --- 2. 安装 Chrome (操作系统级别) ---
-      - name: Install Chrome
+      # --- 2. 安装 Chrome 和所有系统依赖 (修复浏览器崩溃的关键步骤) ---
+      - name: Install Chrome and System Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y google-chrome-stable
-          # 修复依赖：只安装核心依赖，避开旧版 Ubuntu 已移除的包
-          sudo apt-get install -y libxss1
+          # 确保所有 Chrome 运行时依赖都已安装，避免无头模式下的崩溃
+          sudo apt-get install -y google-chrome-stable \
+            libnss3 \
+            libxss1 \
+            libappindicator1 \
+            libindicator7 \
+            libglib2.0-0 \
+            fonts-liberation
           
       # --- 3. 安装并缓存 ChromeDriver ---
       - name: Cache ChromeDriver
         id: cache-chromedriver
         uses: actions/cache@v3
         with:
-          # 缓存 nanasess/setup-chromedriver 的默认安装路径
           path: /usr/local/bin/chromedriver 
-          # 缓存键名，确保在 Ubuntu/OS 变化时重新安装
           key: ${{ runner.os }}-chromedriver-3
 
       - name: Install ChromeDriver
         uses: nanasess/setup-chromedriver@v2
-        # 只有缓存未命中时才运行安装
         if: steps.cache-chromedriver.outputs.cache-hit != 'true' 
 
       - name: Run Weibo fund report script
@@ -62,8 +64,6 @@ jobs:
         run: |
           git config --global user.name "GitHub Action"
           git config --global user.email "action@github.com"
-          # 提交 reports 目录下的所有文件 (MD 和 JSON)
           git add reports/*
-          # '|| true' 确保在没有文件变化时工作流不会因 'No changes to commit' 而失败
           git commit -m "Add Weibo fund report $(date +'%Y-%m-%d')" || true
           git push
