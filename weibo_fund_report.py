@@ -9,6 +9,7 @@ import json
 import jieba
 from snownlp import SnowNLP
 import requests # 新增 requests 库
+import random # 确保 random 库被导入
 
 # MCP Server 配置
 MCP_SERVER_URL = "http://localhost:3000/api/tools/search_content"
@@ -175,7 +176,6 @@ def fetch_weibo_data(keyword, pages=2):
     """
     tweets = []
     
-    # 按照 MCP Server 的 search_content 接口要求构建请求体
     # 我们将 pages 参数转化为单个请求的 limit 参数: total_limit = pages * DEFAULT_LIMIT
     total_limit = pages * DEFAULT_LIMIT
     
@@ -193,14 +193,13 @@ def fetch_weibo_data(keyword, pages=2):
     print(f"Attempting to fetch data from MCP Server: {MCP_SERVER_URL} with keyword '{keyword}' and limit {total_limit}")
     
     try:
-        # 尝试连接 MCP Server
-        response = requests.post(MCP_SERVER_URL, headers=headers, json=payload, timeout=45)
+        # 尝试连接 MCP Server，增加 timeout 以防止卡住
+        response = requests.post(MCP_SERVER_URL, headers=headers, json=payload, timeout=30)
         response.raise_for_status()  # 检查 HTTP 错误
         
         # 解析 MCP Server 返回的 JSON 结构
         response_json = response.json()
         
-        # 假设返回的数据结构在 'data' 或 'results' 字段中，且是一个微博列表
         # 如果 MCP Server 返回了错误信息
         if 'error' in response_json or (response_json.get('status') == 'error'):
              error_msg = response_json.get('error', response_json.get('message', 'Unknown error'))
@@ -247,7 +246,7 @@ def fetch_weibo_data(keyword, pages=2):
     except requests.exceptions.HTTPError as errh:
         print(f"HTTP Error: {errh}")
     except requests.exceptions.ConnectionError as errc:
-        print(f"Connection Error (Is MCP Server running? Check 'sleep 10' duration in YAML): {errc}")
+        print(f"Connection Error (Is MCP Server running?): {errc}")
     except requests.exceptions.Timeout as errt:
         print(f"Timeout Error: {errt}")
     except requests.exceptions.RequestException as err:
