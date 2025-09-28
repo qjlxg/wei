@@ -87,9 +87,10 @@ def fetch_weibo_data(keyword, pages=2):
     """
     tweets = []
     options = Options()
-    options.add_argument('--headless')
+    options.add_argument('--headless=new') # 优化: 使用新的 Headless 模式
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
+    options.add_argument('--window-size=1920,1080') # 优化: 显式设置窗口大小
     options.add_argument('user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36')
     
     try:
@@ -99,6 +100,8 @@ def fetch_weibo_data(keyword, pages=2):
         
         for page in range(1, pages + 1):
             search_url = f"https://s.weibo.com/weibo?q={quote(keyword)}&page={page}"
+            # 在循环内部初始化 soup 变量，防止异常时引用未定义的变量
+            soup = None 
             try:
                 driver.get(search_url)
                 
@@ -155,8 +158,12 @@ def fetch_weibo_data(keyword, pages=2):
                 print(f"Fetched {len(tweets)} tweets from page {page}")
                 
             except Exception as e:
+                # --- 修复：防止引用未定义的 'soup' 变量导致的错误 ---
                 print(f"Error fetching page {page}: {str(e)}")
-                print(soup.prettify()[:1000])  # 打印部分 HTML 调试
+                if soup is not None:
+                    print(soup.prettify()[:1000])  # 打印部分 HTML 调试
+                else:
+                    print("Could not retrieve page source for debugging.")
                 continue
         
     except Exception as e:
