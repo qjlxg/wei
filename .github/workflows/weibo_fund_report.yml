@@ -5,9 +5,9 @@ on:
     - cron: "0 0 * * *"  # 每天00:00 UTC（对应上海时间08:00 CST）
   push:
     paths:
-      - 'weibo_fund_report.py'  # 监听 Python 脚本改动
-      - '.github/workflows/weibo_fund_report.yml'  # 监听工作流文件改动
-  workflow_dispatch:  # 支持手动触发
+      - 'weibo_fund_report.py'
+      - '.github/workflows/weibo_fund_report.yml'
+  workflow_dispatch:
 
 jobs:
   generate-report:
@@ -16,28 +16,45 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
+      # --- 1. 设置 Python 并缓存依赖 ---
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: "3.9"
-
-      - name: Install Chrome
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y google-chrome-stable
-          sudo apt-get install -y libxss1 libappindicator1 libindicator7
+          cache: 'pip' # 启用 pip 依赖缓存
 
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
+          # 安装 Python 库。如果缓存命中，这会非常快。
           pip install requests beautifulsoup4 lxml selenium
+
+      # --- 2. 安装 Chrome (操作系统级别) ---
+      # ⚠️ 注意：由于 Chrome 本身比较大且不常变，
+      #    我们不使用 Actions 缓存，而是利用 apt-get 的本地缓存（通常也很快）
+      - name: Install Chrome
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y google-chrome-stable
+          # 修复依赖错误：移除 libappindicator1/libindicator7，因为它们在新版 Ubuntu 上可能找不到
+          # 只安装 Chrome 运行所需的核心依赖
+          sudo apt-get install -y libxss1
+          
+      # --- 3. 安装并缓存 ChromeDriver ---
+      - name: Cache ChromeDriver
+        id: cache-chromedriver
+        uses: actions/cache@v3
+        with:
+          path: /usr/local/bin/chromedriver # nanasess/setup-chromedriver 的默认安装路径
+          key: ${{ runner.os }}-chromedriver-2 # 缓存键名，版本号可随 ChromeDriver 大版本更新
 
       - name: Install ChromeDriver
         uses: nanasess/setup-chromedriver@v2
+        if: steps.cache-chromedriver.outputs.cache-hit != 'true' # 只有缓存未命中时才运行安装
 
       - name: Run Weibo fund report script
         env:
-          WEIBO_KEYWORD: "基金"  # 固定关键词
+          WEIBO_KEYWORD: "基金"
         run: python weibo_fund_report.py
 
       - name: Commit and push report
@@ -46,4 +63,5 @@ jobs:
           git config --global user.email "action@github.com"
           git add reports/*
           git commit -m "Add Weibo fund report $(date +'%Y-%m-%d')" || echo "No changes to commit"
+          # 如果您使用了 Personal Access Token (PAT) 而不是默认 GITHUB_TOKEN，请在此处调整 git push 命令
           git push
