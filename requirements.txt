@@ -4,3 +4,5 @@ lxml
 selenium
 jieba
 snownlp
+# 新增 WebDriver 自动管理工具
+webdriver-manager
