@@ -15,6 +15,9 @@ import time
 from wordcloud import WordCloud
 import jieba
 from retry import retry
+# 增加 os 和 json 模块用于配置分离
+import os 
+import json 
 
 # --- 日志配置 ---
 logging.basicConfig(
@@ -42,6 +45,9 @@ CLUES_MAP = {
     r'科技股|AI算力|人形机器人': {'desc': '科技创新/AI驱动产业链机会', 'weight': 1.0},
     r'消费|ETF|科技融合': {'desc': '消费科技融合配置', 'weight': 0.8},
     r'公募规模|突破|增长': {'desc': '公募行业规模扩张信号', 'weight': 0.7},
+    # 新增规则：加强新能源和海外市场分析
+    r'新能源|电池|光伏|风电': {'desc': '新能源配置机会', 'weight': 0.8},
+    r'海外|港股|美股|QDII': {'desc': '海外资产配置信号', 'weight': 0.7},
 }
 
 # 2. 经验教训 (行为/结果 -> 风险/教训)
@@ -52,6 +58,9 @@ LESSONS_MAP = {
     r'机构大举增持|主动权益基金': {'desc': '机构行为：主动权益基金仍是配置重点', 'weight': 0.8},
     r'伪成长|拥挤|陷阱': {'desc': '成长赛道拥挤与伪成长风险', 'weight': 0.9},
     r'减持|高位': {'desc': '股东减持与高位回调风险', 'weight': 0.9},
+    # 新增规则：加强市场波动和政策风险
+    r'波动|回调|泡沫': {'desc': '市场波动与估值回调风险', 'weight': 0.9},
+    r'政策|监管|合规': {'desc': '政策变动与监管合规风险', 'weight': 0.8},
 }
 
 # 3. 行业趋势 (结构变化 -> 行业洞察)
@@ -63,6 +72,9 @@ TRENDS_MAP = {
     r'REITs|获批|基础设施': {'desc': 'REITs市场扩张与基础设施投资趋势', 'weight': 0.7},
     r'ESG|减排|绿色金融': {'desc': 'ESG与绿色投资趋势', 'weight': 0.7},
     r'养老|第三支柱': {'desc': '养老基金与长期投资体系建设', 'weight': 0.7},
+    # 新增规则：加强数字化和跨境趋势
+    r'数字化|FinTech|区块链': {'desc': '数字化转型与FinTech趋势', 'weight': 0.8},
+    r'跨境|REITs|海外基金': {'desc': '跨境投资与REITs国际化趋势', 'weight': 0.7},
 }
 
 # 聚合所有主题，用于长期趋势分析
@@ -81,6 +93,13 @@ IMPACT_TEMPLATES = {
     r'REITs|获批': '潜在影响：REITs获批将注入新活力，促进基础设施投资，吸引更多资金进入相关领域。',
     r'ESG|减排': '潜在影响：ESG政策强化将推动绿色转型，利好可持续投资主题基金。',
     r'养老|第三支柱': '潜在影响：养老体系完善将增加长期资金供给，稳定资本市场。',
+    # 新增模板：加强新能源和海外影响
+    r'新能源|电池|光伏|风电': '潜在影响：政策支持下新能源板块或持续反弹，建议配置龙头企业，但关注供应链风险。',
+    r'海外|港股|美股|QDII': '潜在影响：全球流动性宽松利好海外资产，QDII基金配置价值提升，但需警惕汇率波动。',
+    r'波动|回调|泡沫': '潜在影响：短期市场调整可能加剧，投资者应分散持仓，等待低位布局机会。',
+    r'政策|监管|合规': '潜在影响：新政落地或重塑行业格局，利好合规头部机构，但中小玩家面临整合压力。',
+    r'数字化|FinTech|区块链': '潜在影响：FinTech创新加速金融效率提升，相关基金或迎来增长周期。',
+    r'跨境|REITs': '潜在影响：跨境REITs扩张将多元化投资渠道，吸引海外资金流入基础设施领域。',
     r'.*': '潜在影响：该新闻可能对相关板块产生中性影响，建议结合市场动态进一步评估。'
 }
 
@@ -91,14 +110,25 @@ NEGATIVE_WORDS = ['风险', '警惕', '跑输', '减持', '教训', '陷阱', '�
 # --- 新增：动态关键词扩展 ---
 def extract_dynamic_keywords(text: str, min_freq: int = 2) -> List[str]:
     """基于 jieba 分词动态提取高频关键词，排除已有规则中的关键词。"""
-    words = jieba.cut(text)
+    # 移除标点符号和数字，只保留中文、英文、空格
+    clean_text = re.sub(r'[^\u4e00-\u9fa5a-zA-Z\s]', '', text)
+    words = jieba.cut(clean_text)
     word_freq = Counter(words)
+    
+    # 排除通用停用词和规则中的词
+    stopwords = {'的', '了', '是', '在', '和', '也', '等', '基金', '投资', '分析', '报告', '金融', '证券', '公司', '公布', '数据'}
     existing_keywords = set()
     for pattern in ALL_TOPICS_MAP.keys():
         existing_keywords.update(pattern.split('|'))
     
-    dynamic_keywords = [word for word, freq in word_freq.items() if freq >= min_freq and word not in existing_keywords and len(word) > 1]
-    return dynamic_keywords[:5]  # 返回前5个高频词
+    dynamic_keywords = [
+        word for word, freq in word_freq.items() 
+        if freq >= min_freq and 
+           word not in existing_keywords and 
+           word not in stopwords and
+           len(word) > 1
+    ]
+    return dynamic_keywords[:5] # 返回前5个高频词
 
 # --- 数据库管理类 ---
 class DatabaseManager:
@@ -113,7 +143,7 @@ class DatabaseManager:
         self.conn.row_factory = sqlite3.Row
         # 优化：启用 WAL 模式，提升并发性能
         self.conn.execute('PRAGMA journal_mode=WAL')
-    
+        
     def _create_table(self):
         cursor = self.conn.cursor()
         cursor.execute('''
@@ -279,19 +309,23 @@ def fetch_rss_feed(url: str, source_name: str, limit: int = 20) -> List[Dict]:
     response.raise_for_status()
     
     try:
+        # 尝试直接解析
         root = ET.fromstring(response.content)
     except ET.ParseError:
         logger.warning(f"[{source_name}] Error parsing XML. Trying content decoding...")
+        # 尝试用 utf-8 解码后解析，以处理编码问题
         root = ET.fromstring(response.text.encode('utf-8'))
 
     items = root.findall('.//item') or root.findall('.//entry')
     for item in items[:limit]:
+        # 修复：使用显式的 'is not None' 检查
         title_element = item.find('title')
         link_element = item.find('link')
         pub_date_element = item.find('pubDate') or item.find('{http://purl.org/dc/elements/1.1/}date') or item.find('published')
         summary_element = item.find('description') or item.find('summary') or item.find('content')
 
         title = title_element.text.strip() if title_element is not None and title_element.text else ''
+        
         link = 'N/A'
         if link_element is not None:
             if link_element.text:
@@ -319,10 +353,14 @@ def fetch_rss_feed(url: str, source_name: str, limit: int = 20) -> List[Dict]:
 @retry(tries=3, delay=2, backoff=2, logger=logger)
 def fetch_web_page(url: str, source_name: str, selector: str, limit: int = 15) -> List[Dict]:
     filtered_items = []
+    
+    # 提取基础域名用于构建 Referer
+    base_domain = url.split('/')[2]
+    
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/555.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/555.36',
         'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-        'Referer': url.split('/')[2]
+        'Referer': f'https://{base_domain}/' 
     }
     response = requests.get(url, timeout=10, headers=headers)
     response.raise_for_status()
@@ -336,11 +374,15 @@ def fetch_web_page(url: str, source_name: str, selector: str, limit: int = 15) -
         
         title = title_tag.get_text(strip=True)
         link = title_tag.get('href', '')
-        if link and not link.startswith('http'):
-            link = f"https://{url.split('/')[2]}{link}"
         
-        parent = item.find_parent()
-        summary_tag = parent.select_one('.summary, .search-summary, .search-snippet, .search-content, .content')
+        # 修复链接拼接：确保 Web 链接是完整的
+        if link and not link.startswith('http'):
+            # 兼容需要完整链接的情况
+            link = requests.compat.urljoin(url, link)
+        
+        # 优化：尝试从父级或直接兄弟节点寻找摘要，提高 Web 抓取的通用性
+        parent = item.find_parent() if item.find_parent() else soup
+        summary_tag = parent.select_one('.summary, .search-summary, .search-snippet, .search-content, .content, p')
         summary_raw = summary_tag.get_text(strip=True) if summary_tag else title
         summary = clean_html_summary(summary_raw, max_len=400)
         
@@ -368,6 +410,8 @@ def analyze_news(news_items: List[Dict]) -> Dict:
 
     for item in news_items:
         text = item['title'] + ' ' + item['summary']
+        
+        # 1. 投资线索
         for pattern, info in CLUES_MAP.items():
             if re.search(pattern, text, re.IGNORECASE) and info['desc'] not in seen_clues:
                 analysis['investment_clues'].append({
@@ -377,6 +421,8 @@ def analyze_news(news_items: List[Dict]) -> Dict:
                     'weight': info['weight']
                 })
                 seen_clues.add(info['desc'])
+        
+        # 2. 经验教训
         for pattern, info in LESSONS_MAP.items():
             if re.search(pattern, text, re.IGNORECASE) and info['desc'] not in seen_lessons:
                 analysis['experience_lessons'].append({
@@ -386,6 +432,8 @@ def analyze_news(news_items: List[Dict]) -> Dict:
                     'weight': info['weight']
                 })
                 seen_lessons.add(info['desc'])
+        
+        # 3. 行业趋势
         for pattern, info in TRENDS_MAP.items():
             if re.search(pattern, text, re.IGNORECASE) and info['desc'] not in seen_trends:
                 analysis['industry_trends'].append({
@@ -398,7 +446,7 @@ def analyze_news(news_items: List[Dict]) -> Dict:
         
         detailed = detailed_analyze_news(item)
         analysis['detailed_analyses'].append(detailed)
-    
+        
     # 按权重排序
     analysis['investment_clues'].sort(key=lambda x: x['weight'], reverse=True)
     analysis['experience_lessons'].sort(key=lambda x: x['weight'], reverse=True)
@@ -406,21 +454,51 @@ def analyze_news(news_items: List[Dict]) -> Dict:
     
     return analysis
 
-# --- 新增：生成词云 ---
+# --- 词云字体路径查找辅助函数 ---
+def get_chinese_font_path() -> str | None:
+    """尝试查找常见的系统/默认中文字体路径"""
+    # 常见 Windows 路径
+    if os.name == 'nt' and os.path.exists('C:/Windows/Fonts/simhei.ttf'):
+        return 'C:/Windows/Fonts/simhei.ttf'
+    
+    # 常见 Linux/macOS/CI 路径
+    for path in [
+        'SimHei.ttf', # 脚本同目录
+        '/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc',
+        '/System/Library/Fonts/Supplemental/Songti.ttc',
+        '/Library/Fonts/Arial Unicode.ttf',
+        '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc'
+    ]:
+        if os.path.exists(path):
+            return path
+            
+    return None
+
+# --- 新增：生成词云 (已修复 OSEerror) ---
 def generate_wordcloud(keywords: Dict[str, int], output_file: str):
     if not keywords:
         logger.info("No keywords for wordcloud generation.")
         return
-    wordcloud = WordCloud(
-        font_path='SimHei.ttf',  # 确保有中文字体
-        width=800, height=400, background_color='white', max_words=50
-    ).generate_from_frequencies(keywords)
-    plt.figure(figsize=(10, 5))
-    plt.imshow(wordcloud, interpolation='bilinear')
-    plt.axis('off')
-    plt.savefig(f'{output_file}_wordcloud.png')
-    plt.close()
-    logger.info(f"Generated wordcloud: {output_file}_wordcloud.png")
+    
+    font_path = get_chinese_font_path()
+    
+    if font_path is None:
+        logger.error("WordCloud generation failed (OSError: cannot open resource): No valid Chinese font found. Skipping wordcloud generation. Please install SimHei.ttf or a CJK font in the execution environment.")
+        return # 修复：找不到字体时直接返回，避免 OSError
+
+    try:
+        wordcloud = WordCloud(
+            font_path=font_path,
+            width=800, height=400, background_color='white', max_words=50
+        ).generate_from_frequencies(keywords)
+        plt.figure(figsize=(10, 5))
+        plt.imshow(wordcloud, interpolation='bilinear')
+        plt.axis('off')
+        plt.savefig(f'{output_file}_wordcloud.png')
+        plt.close()
+        logger.info(f"Generated wordcloud: {output_file}_wordcloud.png")
+    except Exception as e:
+        logger.error(f"WordCloud generation failed unexpectedly: {e}")
 
 # --- 长期趋势分析函数 ---
 def generate_trend_analysis(db_manager: DatabaseManager) -> str:
@@ -428,28 +506,37 @@ def generate_trend_analysis(db_manager: DatabaseManager) -> str:
     previous_topics = db_manager.get_topics_by_time_range(days=14)
     recent_keywords = db_manager.get_dynamic_keywords_by_time_range(days=7)
     
-    p2_only_topics = {topic: count - recent_topics.get(topic, 0) for topic, count in previous_topics.items()}
-    p2_only_topics = {k: v for k, v in p2_only_topics.items() if v > 0}
+    # 计算前 7 天的独有计数 (P0)
+    p2_only_topics = {
+        topic: count - recent_topics.get(topic, 0)
+        for topic, count in previous_topics.items()
+        if count > recent_topics.get(topic, 0) # 排除在 P1 中计数更高的主题
+    }
     
     trend_report = "\n### 📈 主题与关键词趋势分析 (近 7 天 vs 前 7 天)\n"
     trend_report += "对比显示主题和动态关键词的关注度变化，变化率 > 50% 的主题高亮。\n\n"
     
     # 主题趋势
     trend_report += "#### 主题热度变化\n"
-    trend_report += "| 主题 | 近 7 天 | 前 7 天 | 变化率 | 趋势 |\n"
+    trend_report += "| 主题 | 近 7 天 (P1) | 前 7 天 (P0) | 变化率 | 趋势 |\n"
     trend_report += "| :--- | :---: | :---: | :---: | :---: |\n"
     
     all_topics = set(recent_topics.keys()) | set(p2_only_topics.keys())
-    for topic in sorted(all_topics, key=lambda x: recent_topics.get(x, 0), reverse=True):
+    sorted_topics = sorted(list(all_topics), key=lambda x: recent_topics.get(x, 0), reverse=True)
+
+    for topic in sorted_topics:
         count_p1 = recent_topics.get(topic, 0)
-        count_p0 = p2_only_topics.get(topic, 0)
+        count_p0 = p2_only_topics.get(topic, 0) # 这里使用计算出的 P0 计数
+        
         if count_p1 == 0 and count_p0 == 0:
             continue
+
         if count_p0 > 0:
             change_rate = (count_p1 - count_p0) / count_p0
             trend_icon = "⬆️" if change_rate > 0.1 else ("⬇️" if change_rate < -0.1 else "↔️")
             trend_str = f"{change_rate:.0%}"
         elif count_p1 > 0:
+            # P0 为 0，P1 > 0，视为新热点
             change_rate = float('inf')
             trend_icon = "🔥"
             trend_str = "NEW"
@@ -457,8 +544,10 @@ def generate_trend_analysis(db_manager: DatabaseManager) -> str:
             change_rate = 0
             trend_icon = "➖"
             trend_str = "0%"
+
         if abs(change_rate) > 0.5 and change_rate != float('inf'):
             trend_str = f"**{trend_str}**"
+        
         trend_report += f"| {topic} | {count_p1} | {count_p0} | {trend_str} | {trend_icon} |\n"
     
     # 动态关键词趋势
@@ -495,7 +584,7 @@ def generate_stats_chart(analysis: Dict, output_file: str):
     logger.info(f"Generated stats chart: {output_file}_stats.png")
 
 # --- 生成分析报告 ---
-def generate_analysis_report(analysis: Dict, total_count: int, trend_report: str) -> str:
+def generate_analysis_report(analysis: Dict, total_count: int, trend_report: str, output_file: str) -> str:
     md_report = "\n---\n"
     md_report += "# 📰 基金投资策略分析报告\n\n"
     md_report += f"本报告根据从 {total_count} 条新闻中提取的高价值信息生成，旨在为您提供 **买入指引、风险规避和行业洞察**。\n\n"
@@ -505,7 +594,8 @@ def generate_analysis_report(analysis: Dict, total_count: int, trend_report: str
     md_report += f"- 本次抓取经验教训数量: {len(analysis['experience_lessons'])}\n"
     md_report += f"- 本次抓取行业趋势数量: {len(analysis['industry_trends'])}\n"
     md_report += f"- 总新闻条目: {total_count}\n"
-    md_report += f"- 生成图表: {output_file}_stats.png, {output_file}_wordcloud.png\n\n"
+    # 使用传入的 output_file 参数
+    md_report += f"- 生成图表: {output_file}_stats.png, {output_file}_wordcloud.png\n\n" 
     
     md_report += "## 长期趋势分析\n"
     md_report += trend_report
@@ -515,7 +605,8 @@ def generate_analysis_report(analysis: Dict, total_count: int, trend_report: str
         md_report += "| 焦点标的/策略 | 原始标题 (点击查看) | 权重 |\n"
         md_report += "| :--- | :--- | :---: |\n"
         for clue in analysis['investment_clues']:
-            md_report += f"| **{clue['focus']}** | [{clue['title']}](<{clue['link']})> | {clue['weight']:.1f} |\n"
+            # 修复 Markdown 链接语法
+            md_report += f"| **{clue['focus']}** | [{clue['title']}](<{clue['link']}>) | {clue['weight']:.1f} |\n"
     else:
         md_report += "暂无明确的投资线索或机构观点被识别。\n"
         
@@ -524,7 +615,8 @@ def generate_analysis_report(analysis: Dict, total_count: int, trend_report: str
         md_report += "| 教训/经验 | 原始标题 (点击查看) | 权重 |\n"
         md_report += "| :--- | :--- | :---: |\n"
         for lesson in analysis['experience_lessons']:
-            md_report += f"| **{lesson['lesson']}** | [{lesson['title']}](<{lesson['link']})> | {lesson['weight']:.1f} |\n"
+            # 修复 Markdown 链接语法
+            md_report += f"| **{lesson['lesson']}** | [{lesson['title']}](<{lesson['link']}>) | {lesson['weight']:.1f} |\n"
     else:
         md_report += "暂无明确的经验教训或风险提示被识别。\n"
 
@@ -533,7 +625,8 @@ def generate_analysis_report(analysis: Dict, total_count: int, trend_report: str
         md_report += "| 行业趋势 | 原始标题 (点击查看) | 权重 |\n"
         md_report += "| :--- | :--- | :---: |\n"
         for trend in analysis['industry_trends']:
-            md_report += f"| **{trend['trend']}** | [{trend['title']}](<{trend['link']})> | {trend['weight']:.1f} |\n"
+            # 修复 Markdown 链接语法
+            md_report += f"| **{trend['trend']}** | [{trend['title']}](<{trend['link']}>) | {trend['weight']:.1f} |\n"
     else:
         md_report += "暂无明确的行业趋势或结构变化被识别。\n"
 
@@ -550,53 +643,30 @@ def generate_analysis_report(analysis: Dict, total_count: int, trend_report: str
 
     return md_report
 
-# --- 数据源配置 ---
-proxy_base = 'https://rsshub.rss.zgdnz.cc'
-sources = [
-    {'url': f'{proxy_base}/cls/telegraph/fund', 'name': '财联社-基金电报', 'type': 'rss'},
-    {'url': f'{proxy_base}/eastmoney/report/strategyreport', 'name': '东方财富-策略报告', 'type': 'rss'},
-    {'url': f'{proxy_base}/gelonghui/home/fund', 'name': '格隆汇-基金', 'type': 'rss'},
-    {'url': f'{proxy_base}/stcn/article/list/fund', 'name': '证券时报-基金列表', 'type': 'rss'},
-    {'url': f'{proxy_base}/21caijing/channel/%E8%AF%81%E5%88%B8/%E8%B5%A2%E5%9F%BA%E9%87%91', 'name': '21财经-赢基金', 'type': 'rss'},
-    {'url': f'{proxy_base}/xueqiu/fund', 'name': '雪球-基金RSS', 'type': 'rss'},
-    {'url': f'{proxy_base}/zhihu/topic/19550517', 'name': '知乎-基金话题', 'type': 'rss'},
-    {'url': f'{proxy_base}/sina/finance/fund', 'name': '新浪财经-基金 (代理)', 'type': 'rss'},
-    {
-        'url': 'https://xueqiu.com/k?q=%E5%9F%BA%E9%87%91',
-        'name': '雪球-基金搜索 (Web)',
-        'type': 'web',
-        'selector': '.search__list .search-result-item .search-title a'
-    },
-    {
-        'url': 'https://blog.csdn.net/category_10134701.html?spm=1001.2101.3001.5700',
-        'name': 'CSDN-基金博客 (Web)',
-        'type': 'web',
-        'selector': '.blog-list-box .title a'
-    },
-    {'url': 'http://rss.eastmoney.com/rss_partener.xml', 'name': '东方财富-合作伙伴 (RSS)', 'type': 'rss'},
-    {'url': 'http://rss.sina.com.cn/finance/fund.xml', 'name': '新浪财经-基金要闻 (RSS)', 'type': 'rss'},
-    {'url': 'http://rss.sina.com.cn/roll/finance/hot_roll.xml', 'name': '新浪财经-要闻汇总 (RSS)', 'type': 'rss'},
-    {'url': 'https://dedicated.wallstreetcn.com/rss.xml', 'name': '华尔街见闻 (RSS)', 'type': 'rss'},
-    {'url': 'https://36kr.com/feed', 'name': '36氪 (RSS)', 'type': 'rss'},
-    {'url': 'https://www.hket.com/rss/china', 'name': '香港經濟日報 (RSS)', 'type': 'rss'},
-    {'url': 'http://news.baidu.com/n?cmd=1&class=stock&tn=rss&sub=0', 'name': '百度-股票焦点 (RSS)', 'type': 'rss'},
-    {'url': 'https://www.chinanews.com.cn/rss/finance.xml', 'name': '中新网财经 (RSS)', 'type': 'rss'},
-    {'url': 'https://www.stats.gov.cn/sj/zxfb/rss.xml', 'name': '国家统计局-最新发布 (RSS)', 'type': 'rss'},
-    # 新增高质量来源
-    {'url': 'https://www.jisilu.cn/data/rss/fund', 'name': '集思录-基金动态 (RSS)', 'type': 'rss'},
-    {'url': 'https://feed.cnblogs.com/blog/sitehome/rss', 'name': '博客园-财经博客 (RSS)', 'type': 'rss'},
-    {
-        'url': 'https://www.jianshu.com/c/1b2f57a2a4b3?order_by=added_at',
-        'name': '简书-投资理财 (Web)',
-        'type': 'web',
-        'selector': '.title a'
-    },
-]
+# --- 新增：加载外部配置函数 ---
+def load_sources_from_json(file_path: str = 'sources.json') -> List[Dict]:
+    """从指定的 JSON 文件中加载数据源配置。"""
+    if not os.path.exists(file_path):
+        logger.error(f"Configuration file not found: {file_path}. Using empty list.")
+        return []
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            sources = json.load(f)
+            logger.info(f"Loaded {len(sources)} sources from {file_path}.")
+            return sources
+    except json.JSONDecodeError as e:
+        logger.error(f"Error decoding JSON from {file_path}: {e}")
+        return []
+    except Exception as e:
+        logger.error(f"An unexpected error occurred while loading sources: {e}")
+        return []
 
-def generate_markdown(news_items: List[Dict], analysis_report: str, timestamp_str: str) -> str:
+# ⚠️ 注意：旧的硬编码 sources 列表已从此处移除，以实现配置外置化。
+
+def generate_markdown(news_items: List[Dict], analysis_report: str, timestamp_str: str, configured_sources: List[Dict]) -> str:
     md_content = f"# 基金新闻聚合 ({timestamp_str})\n\n"
-    configured_sources = list(set([s['name'].split('(')[0].strip() for s in sources]))
-    source_names = "、".join(configured_sources)
+    # 从传入的配置列表中提取名称
+    source_names = "、".join([s['name'].split('(')[0].strip() for s in configured_sources])
     md_content += f"来源：{source_names}（关键词：基金/实盘/观点/经验/推荐/策略/投资/宏观/金融）。总计 {len(news_items)} 条。\n"
     md_content += analysis_report
     md_content += "\n---\n# 原始新闻列表\n\n"
@@ -612,11 +682,14 @@ def main():
     tz = pytz.timezone('Asia/Shanghai')
     now = datetime.now(tz)
     timestamp_str = now.strftime('%Y-%m-%d %H:%M:%S')
-    global output_file
-    output_file = f'fund_news_{now.strftime("%Y%m%d")}'
+    
+    output_file_base = f'fund_news_{now.strftime("%Y%m%d")}' 
+    
+    # 💥 关键改动：动态加载 sources 列表
+    sources = load_sources_from_json() 
     
     all_news = []
-    logger.info(f"[{timestamp_str}] 开始抓取基金新闻...")
+    logger.info(f"[{timestamp_str}] 开始抓取基金新闻 (共 {len(sources)} 个来源)...")
     
     existing_links = db_manager.get_existing_links()
     
@@ -626,23 +699,33 @@ def main():
             if source['type'] == 'rss':
                 items = fetch_rss_feed(source['url'], source['name'], limit=20)
             else:
-                items = fetch_web_page(source['url'], source['name'], source.get('selector'), limit=15)
+                # 确保 Web 源有 selector
+                selector = source.get('selector')
+                if not selector:
+                    logger.error(f"Web source {source['name']} is missing a 'selector' key in sources.json. Skipping.")
+                    continue
+                items = fetch_web_page(source['url'], source['name'], selector, limit=15)
             all_news.extend(items)
         except Exception as e:
             logger.error(f"Failed to process source {source['name']}: {e}")
-    
+            
     unique_news = []
     batch_seen = set()
     for news in all_news:
         link = news.get('link', 'N/A')
+        
+        # 跨次去重
         if link != 'N/A' and link in existing_links:
             continue
+            
+        # 批次内去重 (标题+来源)
         if (news['title'], news['source']) not in batch_seen:
             unique_news.append(news)
             batch_seen.add((news['title'], news['source']))
             if link != 'N/A':
-                existing_links.add(link)
+                existing_links.add(link) # 提前加入，避免本批次内重复
 
+    # 排序
     unique_news.sort(key=lambda x: datetime.strptime(x['pubDate'], '%Y-%m-%d %H:%M:%S') if x['pubDate'] != 'N/A' else datetime(1900, 1, 1), reverse=True)
     
     analysis_results = analyze_news(unique_news)
@@ -651,20 +734,22 @@ def main():
     for item, detailed_analysis in zip(unique_news, analysis_results['detailed_analyses']):
         db_manager.store_news_and_analysis(item, detailed_analysis)
     
-    # 生成词云
+    # 生成词云 (已修复 OSEerror)
     recent_keywords = db_manager.get_dynamic_keywords_by_time_range(days=7)
-    generate_wordcloud(recent_keywords, output_file)
+    generate_wordcloud(recent_keywords, output_file_base)
     
+    # 生成报告
     trend_report_md = generate_trend_analysis(db_manager)
-    analysis_report_md = generate_analysis_report(analysis_results, len(unique_news), trend_report_md)
-    generate_stats_chart(analysis_results, output_file)
+    analysis_report_md = generate_analysis_report(analysis_results, len(unique_news), trend_report_md, output_file_base) 
+    generate_stats_chart(analysis_results, output_file_base)
     
-    md_content = generate_markdown(unique_news, analysis_report_md, timestamp_str)
+    # 修复：将 sources 列表作为参数传入 generate_markdown
+    md_content = generate_markdown(unique_news, analysis_report_md, timestamp_str, sources)
     
-    with open(f'{output_file}.md', 'w', encoding='utf-8') as f:
+    with open(f'{output_file_base}.md', 'w', encoding='utf-8') as f:
         f.write(md_content)
     
-    logger.info(f"收集到 {len(unique_news)} 条独特基金新闻。分析报告已生成并保存至 {output_file}.md")
+    logger.info(f"收集到 {len(unique_news)} 条独特基金新闻。分析报告已生成并保存至 {output_file_base}.md")
     logger.info("\n--- 分析报告摘要 ---")
     logger.info(analysis_report_md.split('## 💰')[0])
     
