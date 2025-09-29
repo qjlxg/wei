@@ -45,7 +45,7 @@ jobs:
       run: |
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
-        git add fund_news.md
+        git add fund_news_*.md
         git diff --staged --quiet || git commit -m "Update fund_news.md [$(date +%Y-%m-%d)] - Real fund sources"
         git push
       env:
