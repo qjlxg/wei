@@ -220,7 +220,7 @@ def detailed_analyze_news(item: Dict) -> Dict:
         'detailed_summary': f"标题：{item['title']}\n摘要：{item['summary']}",
         'key_topics': [],
         'potential_impact': '',
-        'sentiment': simple_sentiment_analysis(text)  # 新增情感分析
+        'sentiment': simple_sentiment_analysis(text)  
     }
     
     # 提取关键主题（基于现有MAP扩展）
