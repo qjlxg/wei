@@ -9,6 +9,7 @@ on:
   push:
     paths:
       - 'fund_news_scraper.py'
+      - 'sources.json'
       - '.github/workflows/weibo_fund_report.yml'
   workflow_dispatch:  # 支持手动触发
 
