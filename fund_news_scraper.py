@@ -6,6 +6,8 @@ import re
 import xml.etree.ElementTree as ET
 from dateutil import parser
 import pytz
+import matplotlib.pyplot as plt
+from collections import Counter
 
 # --- 【核心配置】分析规则库：通用、可扩展的分析逻辑 ---
 
@@ -24,6 +26,10 @@ CLUES_MAP = {
     r'ETF|股票ETF|百亿俱乐部|吸金': '资金流向/股票ETF/吸金赛道',
     r'贵金属|黄金|避险': '资产对冲/避险配置 (贵金属)',
     r'均衡配置|光伏|化工|农业|有色|银行': '低位/均衡板块配置建议',
+    # 新增规则以丰富内容
+    r'科技股|AI算力|人形机器人': '科技创新/AI驱动产业链机会',
+    r'消费|ETF|科技融合': '消费科技融合配置',
+    r'公募规模|突破|增长': '公募行业规模扩张信号',
 }
 
 # 2. 经验教训 (行为/结果 -> 风险/教训)
@@ -32,6 +38,9 @@ LESSONS_MAP = {
     r'跑输大盘|未能满仓|红利板块': '新基金建仓策略与市场错配风险',
     r'基金经理|涉赌|免职': '基金经理道德风险与公司内控警示',
     r'机构大举增持|主动权益基金': '机构行为：主动权益基金仍是配置重点',
+    # 新增规则
+    r'伪成长|拥挤|陷阱': '成长赛道拥挤与伪成长风险',
+    r'减持|高位': '股东减持与高位回调风险',
 }
 
 # 3. 行业趋势 (结构变化 -> 行业洞察)
@@ -40,6 +49,10 @@ TRENDS_MAP = {
     r'费率|下调|托管费|余额宝': '行业趋势：关注费率成本的长期下行',
     r'私募股权|子公司|广发基金': '行业趋势：头部公募的业务多元化',
     r'量化基金经理|主动基金|一拖多': '行业趋势：量化与主动投资边界模糊',
+    # 新增规则
+    r'REITs|获批|基础设施': 'REITs市场扩张与基础设施投资趋势',
+    r'ESG|减排|绿色金融': 'ESG与绿色投资趋势',
+    r'养老|第三支柱': '养老基金与长期投资体系建设',
 }
 
 # 新增：潜在影响模板库 (基于关键词生成新闻影响总结)
@@ -52,9 +65,17 @@ IMPACT_TEMPLATES = {
     r'私募观点|中证500': '潜在影响：中证500指数可能吸引更多资金流入科技成长股，提升指数表现。',
     r'贵金属|避险': '潜在影响：在地缘风险下，贵金属作为对冲工具需求上升，配置价值提升。',
     r'业务多元化|子公司': '潜在影响：公募扩展私募股权等领域，增强综合竞争力，利好长期投资者。',
+    # 新增模板
+    r'REITs|获批': '潜在影响：REITs获批将注入新活力，促进基础设施投资，吸引更多资金进入相关领域。',
+    r'ESG|减排': '潜在影响：ESG政策强化将推动绿色转型，利好可持续投资主题基金。',
+    r'养老|第三支柱': '潜在影响：养老体系完善将增加长期资金供给，稳定资本市场。',
     # 默认模板
     r'.*': '潜在影响：该新闻可能对相关板块产生中性影响，建议结合市场动态进一步评估。'
 }
+
+# 新增：简单情感分析关键词
+POSITIVE_WORDS = ['看好', '上涨', '增长', '机会', '布局', '推荐']
+NEGATIVE_WORDS = ['风险', '警惕', '跑输', '减持', '教训', '陷阱']
 
 # -----------------------------------------------------------------
 
@@ -85,6 +106,18 @@ def clean_html_summary(summary: str, max_len: int = 400) -> str:
         return clean_text[:max_len] + '...'
     return clean_text
 
+# --- 新增：简单情感分析函数 ---
+def simple_sentiment_analysis(text: str) -> str:
+    """基于关键词的简单情感分析。"""
+    pos_count = sum(1 for word in POSITIVE_WORDS if re.search(word, text, re.IGNORECASE))
+    neg_count = sum(1 for word in NEGATIVE_WORDS if re.search(word, text, re.IGNORECASE))
+    if pos_count > neg_count:
+        return '正面 (Positive)'
+    elif neg_count > pos_count:
+        return '负面 (Negative)'
+    else:
+        return '中性 (Neutral)'
+
 # --- 新增：详细新闻分析函数 ---
 def detailed_analyze_news(item: Dict) -> Dict:
     """为单条新闻生成详细分析和潜在影响。"""
@@ -93,7 +126,8 @@ def detailed_analyze_news(item: Dict) -> Dict:
         'title': item['title'],
         'detailed_summary': f"标题：{item['title']}\n摘要：{item['summary']}",
         'key_topics': [],
-        'potential_impact': ''
+        'potential_impact': '',
+        'sentiment': simple_sentiment_analysis(text)  # 新增情感分析
     }
     
     # 提取关键主题（基于现有MAP扩展）
@@ -267,12 +301,37 @@ def analyze_news(news_items: List[Dict]) -> Dict:
                 
     return analysis
 
+# --- 新增：生成统计图表 ---
+def generate_stats_chart(analysis: Dict, output_file: str):
+    """使用matplotlib生成简单条形图，展示类别计数。"""
+    clue_count = len(analysis['investment_clues'])
+    lesson_count = len(analysis['experience_lessons'])
+    trend_count = len(analysis['industry_trends'])
+    
+    categories = ['Investment Clues', 'Experience Lessons', 'Industry Trends']
+    counts = [clue_count, lesson_count, trend_count]
+    
+    plt.figure(figsize=(8, 5))
+    plt.bar(categories, counts, color=['blue', 'orange', 'green'])
+    plt.title('News Analysis Categories Count')
+    plt.ylabel('Count')
+    plt.savefig(f'{output_file}_stats.png')
+    plt.close()
+    print(f"Generated stats chart: {output_file}_stats.png")
+
 # --- 生成分析报告 ---
 def generate_analysis_report(analysis: Dict, total_count: int) -> str:
-    """根据分析结果生成结构化 Markdown 报告。新增详细分析部分。"""
+    """根据分析结果生成结构化 Markdown 报告。新增详细分析部分和统计概述。"""
     md_report = "\n---\n"
     md_report += "# 📰 基金投资策略分析报告\n\n"
     md_report += f"本报告根据从 {total_count} 条新闻中提取的高价值信息生成，旨在为您提供 **买入指引、风险规避和行业洞察**。\n\n"
+
+    # 新增：统计概述
+    md_report += "## 📊 统计概述\n"
+    md_report += f"- 投资线索数量: {len(analysis['investment_clues'])}\n"
+    md_report += f"- 经验教训数量: {len(analysis['experience_lessons'])}\n"
+    md_report += f"- 行业趋势数量: {len(analysis['industry_trends'])}\n"
+    md_report += f"- 总新闻条目: {total_count}\n\n"
 
     # 1. 投资线索
     md_report += "## 💰 投资线索与市场焦点 (买入指引)\n"
@@ -310,12 +369,12 @@ def generate_analysis_report(analysis: Dict, total_count: int) -> str:
     # 新增：详细新闻分析与潜在影响
     md_report += "\n## 🔍 所有新闻详细分析与潜在影响\n"
     if analysis['detailed_analyses']:
-        md_report += "| 新闻标题 | 关键主题 | 潜在影响 |\n"
-        md_report += "| :--- | :--- | :--- |\n"
+        md_report += "| 新闻标题 | 关键主题 | 情感分析 | 潜在影响 |\n"
+        md_report += "| :--- | :--- | :--- | :--- |\n"
         
         for det in analysis['detailed_analyses']:
             topics_str = '; '.join(det['key_topics']) if det['key_topics'] else '无特定主题'
-            md_report += f"| {det['title']} | {topics_str} | **{det['potential_impact']}** |\n"
+            md_report += f"| {det['title']} | {topics_str} | {det['sentiment']} | **{det['potential_impact']}** |\n"
     else:
         md_report += "暂无详细分析。\n"
 
@@ -339,7 +398,10 @@ sources = [
     # 新增扩展来源：社区和个人博客（基于可用测试）
     {'url': f'{proxy_base}/xueqiu/fund', 'name': '雪球-基金RSS', 'type': 'rss'},  # 雪球基金社区RSS
     {'url': f'{proxy_base}/zhihu/topic/19550517', 'name': '知乎-基金话题', 'type': 'rss'},  # 知乎基金专栏社区
-    {'url': 'https://dbarobin.com/rss.xml', 'name': '区块链罗宾-投资博客', 'type': 'rss'}  # 个人投资博客（区块链/基金相关）
+    {'url': 'https://dbarobin.com/rss.xml', 'name': '区块链罗宾-投资博客', 'type': 'rss'},  # 个人投资博客（区块链/基金相关）
+    # 进一步扩展：更多可用来源
+    {'url': f'{proxy_base}/sina/finance/fund', 'name': '新浪财经-基金', 'type': 'rss'},  # 新浪基金RSS
+    {'url': 'https://blog.csdn.net/category_10134701.html?spm=1001.2101.3001.5700', 'name': 'CSDN-基金博客', 'type': 'web', 'selector': '.blog-list-box .title a'},  # CSDN基金相关博客
 ]
 
 def generate_markdown(news_items: List[Dict], analysis_report: str, timestamp_str: str) -> str:
@@ -415,6 +477,9 @@ def main():
     # 【核心】运行分析
     analysis_results = analyze_news(unique_news)
     analysis_report_md = generate_analysis_report(analysis_results, len(unique_news))
+    
+    # 新增：生成统计图表
+    generate_stats_chart(analysis_results, date_str)
     
     # 生成MD
     # 关键修改 2: 传入 timestamp_str 到 generate_markdown
