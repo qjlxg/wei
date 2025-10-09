@@ -18,7 +18,7 @@ from collections import Counter
 CHANNEL_USERNAMES = [
     # 核心金融频道
     'FinanceNewsDaily', 
-    'SubscriptionShare', 
+    
     'clsvip', 
     'ywcqdz',
     # 验证有效/修正的新增频道 (中文/全球)
