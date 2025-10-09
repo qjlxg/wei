@@ -14,35 +14,17 @@ from collections import Counter
 # 【配置区】要抓取的频道列表
 # =========================================================
 CHANNEL_USERNAMES = [
-    # 现有核心金融频道
-    'FinanceNewsDaily', 
-    'SubscriptionShare', 
-    'clsvip', 
+    # 核心金融频道（验证活跃，中文）
+    'FinanceNewsDaily',
     'ywcqdz',
-    # 验证有效/修正的新增频道 (去除 0 消息)
-    'ushasanalysis',       # 修正 ushas_analysis
-    'thesafetraderacademy', # 替换 safe_trader_academy
-    'TechNewsTodayBot',    # 替换 zh_technews
-    'MacroHub',            # 替换 MacroFinanceHub
-    'GlobalMarketUpdates', # 保留
-    'ChineseStockMarket',  # 替换 AshareDailyBrief
-    'NiftyProX',           # 修正 niftyprox
-    'equity99',
-    'learn2tradenews',     # 修正 learn2trade
-    'TechNews',            # 替换 TechNews2024
-    'GlobalMacro',         # 替换 GlobalMacroReport
-    'CommoditySignals',    # 替换 CommodityTradeInfo
-    'tfainvestments',      # 替换 FinancialAnalystView
-    'CryptoMarketUpdates',
-    # 新增验证活跃的中文美股频道 (2025 年活跃)
-    'BloombergZh',         # 彭博中文美股新闻
-    'meigucaijing',        # 美股财经
-    'usstocknews',         # 美股新闻
-    'xueqiushare',         # 雪球美股
-    'sinafinance',         # 新浪美股
-    'caijingmeigu'         # 财经美股
+    # 新增验证活跃的中文美股频道 (2025 年活跃，内容 >50 字符)
+    'meiguxinwen',    # 美股新闻
+    'caijingus',      # 美股/宏观
+    'xueqiuus',       # 美股/社区
+    'usstockdaily',   # 美股涨幅
+    'wallstreetcn',   # 美股/全球
+    'jinrongjie'      # 美股/基金
 ]
-# =========================================================
 # =========================================================
 
 # 设置上海时区
@@ -58,7 +40,7 @@ FULL_FILENAME_PATH = os.path.join(BASE_DIR, FILENAME_BASE)
 
 # --- 市场影响分析配置 ---
 IMPACT_KEYWORDS = {
-    'positive': ['涨', '上涨', '大涨', '飙涨', '暴涨', '突破', '利好', '新高', '看好', '增持', '走强', '复苏', '站上', '扩大', '利多', '领先'],
+    'positive': ['涨', '上涨', '大涨', '飙涨', '暴涨', '突破', '利好', '新高', '看好', '增持', '走强', '复苏', '站上', '扩大', '利多', '领先', '财报超预期'],
     'negative': ['跌', '下跌', '大跌', '暴跌', '走低', '利空', '下行', '风险', '担忧', '疲软', '收窄', '走弱', '缩减', '亏损', '做空'],
     'neutral_positive': ['回升', '反弹', '温和', '企稳', '放量', '回购'],
     'neutral_negative': ['压力', '放缓', '震荡', '回调', '盘整', '高位'],
@@ -66,7 +48,7 @@ IMPACT_KEYWORDS = {
 
 SECTOR_KEYWORDS = {
     '黄金/贵金属': ['黄金', '沪金', '白银', '钯金', '金价', '贵金属', 'XAUUSD'],
-    'A股/大盘': ['A股', '沪指', '深成指', '创业板', '沪深', '市场', '京三市', '北向资金', 'Nifty'],
+    'A股/大盘': ['A股', '沪指', '深成指', '创业板', '沪深', '市场', '京三市', '北向资金'],
     '期货/大宗商品': ['期货', '棕榈油', '生猪', '鸡蛋', 'LPG', '集运', '液化天然气', '碳酸锂', '铜价', '原油', '大宗商品', '工业品'],
     '科技/半导体': ['芯片', '科创50', '中芯国际', '华虹公司', '先进封装', '内存', 'SSD', 'AI', '大模型', '算力', '半导体'],
     '新能源/储能': ['碳酸锂', '储能', '光伏', '电池级', 'HVDC', '新能源汽车', '风电'],
@@ -74,11 +56,9 @@ SECTOR_KEYWORDS = {
     '港股/汇率': ['恒生指数', '恒指', '泰铢', '美元', '卢比', '新加坡元', '汇率', '港股', '离岸人民币'],
     '稀土': ['稀土', '出口管制'],
     '数字货币': ['比特币', '以太坊', 'BTC', 'ETH', '加密货币', '区块链', 'Solana'],
-    '指数/银行': ['Bank Nifty', 'Nifty', '指数', '银行股'],
-    '全球/外汇': ['外汇', 'USD', 'EUR', 'GBP', '全球市场'],
-    '基金/ETF': ['ETF', '基金', '黄金ETF', '有色ETF', '指数基金', '避险基金'],
+    '基金/ETF': ['ETF', '基金', '黄金ETF', '有色ETF', '指数基金', '避险基金', 'SPY', 'QQQ', 'DIA'],
     '期权/交易信号': ['期权', '信号', '做多', '做空', '看涨', '看跌', '合约'],
-    '美股': ['美股', 'NASDAQ', 'S&P', 'Dow', 'US30', 'AMD', 'NVDA', 'AAPL', 'Dow Jones', 'S&P 500']
+    '美股': ['美股', 'NASDAQ', 'S&P', 'Dow', 'US30', 'AMD', 'NVDA', 'AAPL', 'TSLA', 'GOOGL', 'MSFT', 'Dow Jones', 'S&P 500']
 }
 
 def analyze_market_impact(text, hashtags):
@@ -86,7 +66,7 @@ def analyze_market_impact(text, hashtags):
     impact_sectors = set()
     stocks = []
     
-    # 提取股票代码（扩展美股/A 股模式）
+    # 提取股票代码
     stock_pattern = r'(中芯国际|华虹公司|江波龙|芯联集成|中微公司|西部超导|芯原股份|汇丰控股|英伟达|NVDA|AAPL|AMD|TSLA|GOOGL|MSFT)'
     stocks = re.findall(stock_pattern, text)
     
@@ -97,9 +77,9 @@ def analyze_market_impact(text, hashtags):
                 impact_sectors.add(sector)
                 break
     
-    # 计算分数（优化权重，如 '暴涨' +3）
+    # 计算分数
     for word in IMPACT_KEYWORDS['positive']:
-        score += combined_content.count(word) * (3 if word in ['暴涨', '飙涨'] else 2)
+        score += combined_content.count(word) * (3 if word in ['暴涨', '飙涨', '财报超预期'] else 2)
     for word in IMPACT_KEYWORDS['neutral_positive']:
         score += combined_content.count(word) * 1
     for word in IMPACT_KEYWORDS['negative']:
@@ -131,8 +111,6 @@ def analyze_market_impact(text, hashtags):
         
     return summary
 
-# --- 实用工具函数 ---
-
 def setup_directories():
     os.makedirs(BASE_DIR, exist_ok=True)
     if os.path.exists(MEDIA_DIR):
@@ -140,11 +118,32 @@ def setup_directories():
     os.makedirs(MEDIA_DIR, exist_ok=True)
     print(f"数据将保存到目录: {BASE_DIR}")
 
+def check_channel_active(username):
+    """预检查频道是否活跃"""
+    url = f"https://t.me/s/{username}"
+    try:
+        session = requests.Session()
+        retries = Retry(total=2, backoff_factor=0.5, status_forcelist=[429, 500, 502, 503, 504])
+        session.mount('https://', HTTPAdapter(max_retries=retries))
+        response = session.get(url, timeout=5)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, 'html.parser')
+        messages = soup.find_all('div', class_='tgme_widget_message')
+        return len(messages) > 0
+    except:
+        return False
+
 def get_channel_content(username):
     """从 Telegram Web 预览页面抓取内容"""
     url = f"https://t.me/s/{username}"
     all_messages = []
     downloaded_count = 0
+    min_text_length = 50  # 最小文本长度
+    
+    # 预检查频道活跃
+    if not check_channel_active(username):
+        print(f"频道 @{username} 无活跃内容，跳过。")
+        return f"## 频道: @{username}（共 0 条消息）\n\n**警告:** 未找到任何消息，该频道可能不存在或启用了内容限制。\n"
     
     print(f"开始抓取 Web 预览页面: {url}...")
     
@@ -156,8 +155,7 @@ def get_channel_content(username):
         response.raise_for_status() 
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        # 优化文本提取：从 soup 直接获取完整消息
-        messages = soup.find_all('div', class_='tgme_widget_message', limit=5)  # 优化 limit=5 减少负载
+        messages = soup.find_all('div', class_='tgme_widget_message', limit=5)
         
         if not messages:
             print(f"频道 @{username} 无消息，跳过分析。")
@@ -183,20 +181,23 @@ def get_channel_content(username):
                     
                     msg_text += f"---\n**时间 (上海):** {time_sh} **(ID:** `{message_id}` **)**\n"
             
-            # 2. 提取并清理消息文本内容（优化避免截断）
+            # 2. 提取并清理消息文本内容
             text_tag = message.find('div', class_='tgme_widget_message_text')
             if text_tag:
-                # 使用 str(text_tag).replace 完整提取
                 text_content = str(text_tag).replace('<br/>', '\n').replace('<br>', '\n')
                 clean_text = BeautifulSoup(text_content, 'html.parser').get_text(separator='\n', strip=True)
                 
-            # 3. 提取并清理 Hashtag
+            # 3. 过滤无意义内容（纯链接或过短）
+            if re.match(r'^https?://', clean_text.strip()) or len(clean_text.strip()) < min_text_length:
+                continue
+                
+            # 4. 提取并清理 Hashtag
             hashtags = re.findall(r'#\w+', clean_text)
             if hashtags:
                 msg_text += "\n**标签**: " + ", ".join(hashtags) + "\n"
                 clean_text = re.sub(r'#\w+', '', clean_text).strip()
             
-            # 4. 媒体下载和标记
+            # 5. 媒体下载和标记
             media_tag = message.find('a', class_='tgme_widget_message_photo_wrap') or \
                         message.find('a', class_='tgme_widget_message_document_wrap')
             
@@ -224,19 +225,19 @@ def get_channel_content(username):
                 elif media_tag:
                     msg_text += f"\n*[包含媒体/文件，请查看原始链接]({url})*\n"
 
-            # 5. 市场影响分析
+            # 6. 市场影响分析
             impact_summary = analyze_market_impact(clean_text, hashtags)
             
-            # 6. 跳过空消息
+            # 7. 跳过空消息
             if not clean_text and not media_tag:
                 continue
 
-            # 7. 添加清理后的文本和分析结果
+            # 8. 添加清理后的文本和分析结果
             if clean_text:
                 msg_text += f"\n{clean_text}\n"
             msg_text += f"\n{impact_summary}\n"
             
-            # 8. 原始消息链接
+            # 9. 原始消息链接
             if message_id != 'N/A':
                 msg_text += f"\n**[原始链接](https://t.me/{username}/{message_id})**\n"
             
@@ -271,7 +272,7 @@ def generate_overall_summary(all_content):
         'impact_distribution': {emoji_to_label[emoji]: count for emoji, count in impact_counter.items() if emoji in emoji_to_label},
         'top_sectors': Counter(sector_mentions).most_common(5),
         'top_stocks': Counter([stock for stocks_list in stocks for stock in stocks_list.split(', ')]).most_common(5),
-        'recommendation': '整体利好美股/科技/黄金板块，警惕港股/稀土风险' if impact_counter['🟢'] > impact_counter['🔴'] else '中性市场，观察宏观/美股信号'
+        'recommendation': '整体利好美股/科技/黄金板块，建议关注 SPY/QQQ ETF，警惕港股/稀土风险' if impact_counter['🟢'] > impact_counter['🔴'] else '中性市场，观察美股/宏观信号'
     }
     
     json_path = FULL_FILENAME_PATH.replace('.md', '_overall_summary.json')
