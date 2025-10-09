@@ -6,11 +6,9 @@ from bs4 import BeautifulSoup
 from datetime import datetime
 import pytz
 from requests.adapters import HTTPAdapter
-# 注意：这里我们使用 requests.packages 兼容旧版本，
-# 建议同时在 requirements.txt 中包含 urllib3
 from requests.packages.urllib3.util.retry import Retry 
 import json
-from collections import Counter  # 新增：用于整体总结计数
+from collections import Counter
 
 # =========================================================
 # 【配置区】要抓取的频道列表
@@ -21,7 +19,7 @@ CHANNEL_USERNAMES = [
     'SubscriptionShare', 
     'clsvip', 
     'ywcqdz',
-    # 修正/验证的有效新增频道 (去除 0 消息)
+    # 验证有效/修正的新增频道 (去除 0 消息)
     'ushasanalysis',       # 修正 ushas_analysis
     'thesafetraderacademy', # 替换 safe_trader_academy
     'TechNewsTodayBot',    # 替换 zh_technews
@@ -38,42 +36,32 @@ CHANNEL_USERNAMES = [
     'CryptoMarketUpdates',
     # 新增验证活跃的中文美股频道 (2025 年活跃)
     'BloombergZh',         # 彭博中文美股新闻
-    'meigucaijing',        # 美股财经资讯
+    'meigucaijing',        # 美股财经
     'usstocknews',         # 美股新闻
-    'xueqiushare',         # 雪球美股分享
+    'xueqiushare',         # 雪球美股
     'sinafinance',         # 新浪美股
     'caijingmeigu'         # 财经美股
 ]
 # =========================================================
 # =========================================================
 
-
 # 设置上海时区
 SH_TZ = pytz.timezone('Asia/Shanghai')
 now_shanghai = datetime.now(SH_TZ)
 
 # --- 路径和文件名生成逻辑 ---
-# 1. 创建日期目录结构 (例如: 2025-10/09)
 DATE_DIR = now_shanghai.strftime("%Y-%m/%d")
-
-# 2. 完整保存路径 (例如: 2025-10/09/media)
 BASE_DIR = os.path.join(os.getcwd(), DATE_DIR)
 MEDIA_DIR = os.path.join(BASE_DIR, 'media')
-
-# 3. 文件名 (例如: 15-20-00_telegram_web_content.md)
 FILENAME_BASE = now_shanghai.strftime("%H-%M-%S_telegram_web_content.md")
 FULL_FILENAME_PATH = os.path.join(BASE_DIR, FILENAME_BASE)
-# --- 路径和文件名生成逻辑结束 ---
 
 # --- 市场影响分析配置 ---
 IMPACT_KEYWORDS = {
-    # 积极关键词 (分数 +2)
-    'positive': ['涨', '上涨', '大涨', '飙涨', '突破', '利好', '新高', '看好', '增持', '走强', '复苏', '站上', '扩大', '利多', '领先', 'rally', 'surge', 'breakout'],
-    # 消极关键词 (分数 -2)
-    'negative': ['跌', '下跌', '大跌', '走低', '利空', '下行', '风险', '担忧', '疲软', '收窄', '走弱', '缩减', '亏损', '做空', 'drop', 'decline', 'correction'],
-    # 中性/关注关键词 (分数 +1 或 -1)
-    'neutral_positive': ['回升', '反弹', '温和', '企稳', '放量', '回购', 'rebound', 'stabilize'],
-    'neutral_negative': ['压力', '放缓', '震荡', '回调', '盘整', '高位', 'volatility', 'pullback'],
+    'positive': ['涨', '上涨', '大涨', '飙涨', '暴涨', '突破', '利好', '新高', '看好', '增持', '走强', '复苏', '站上', '扩大', '利多', '领先'],
+    'negative': ['跌', '下跌', '大跌', '暴跌', '走低', '利空', '下行', '风险', '担忧', '疲软', '收窄', '走弱', '缩减', '亏损', '做空'],
+    'neutral_positive': ['回升', '反弹', '温和', '企稳', '放量', '回购'],
+    'neutral_negative': ['压力', '放缓', '震荡', '回调', '盘整', '高位'],
 }
 
 SECTOR_KEYWORDS = {
@@ -86,26 +74,22 @@ SECTOR_KEYWORDS = {
     '港股/汇率': ['恒生指数', '恒指', '泰铢', '美元', '卢比', '新加坡元', '汇率', '港股', '离岸人民币'],
     '稀土': ['稀土', '出口管制'],
     '数字货币': ['比特币', '以太坊', 'BTC', 'ETH', '加密货币', '区块链', 'Solana'],
-    # 新增：兼容扩展频道
     '指数/银行': ['Bank Nifty', 'Nifty', '指数', '银行股'],
     '全球/外汇': ['外汇', 'USD', 'EUR', 'GBP', '全球市场'],
-    # 继续扩展关键词（针对基金/板块影响）
     '基金/ETF': ['ETF', '基金', '黄金ETF', '有色ETF', '指数基金', '避险基金'],
     '期权/交易信号': ['期权', '信号', '做多', '做空', '看涨', '看跌', '合约'],
-    # 新增：美股专属关键词
     '美股': ['美股', 'NASDAQ', 'S&P', 'Dow', 'US30', 'AMD', 'NVDA', 'AAPL', 'Dow Jones', 'S&P 500']
 }
 
-
 def analyze_market_impact(text, hashtags):
-    """
-    基于关键词和标签对文本进行基本的市场影响分析。
-    返回一个包含影响、行业和情绪的字典。
-    """
     score = 0
     impact_sectors = set()
+    stocks = []
     
-    # 1. 识别行业/资产 (基于文本和标签)
+    # 提取股票代码（扩展美股/A 股模式）
+    stock_pattern = r'(中芯国际|华虹公司|江波龙|芯联集成|中微公司|西部超导|芯原股份|汇丰控股|英伟达|NVDA|AAPL|AMD|TSLA|GOOGL|MSFT)'
+    stocks = re.findall(stock_pattern, text)
+    
     combined_content = text + " ".join(hashtags)
     for sector, keywords in SECTOR_KEYWORDS.items():
         for keyword in keywords:
@@ -113,25 +97,24 @@ def analyze_market_impact(text, hashtags):
                 impact_sectors.add(sector)
                 break
     
-    # 2. 计算情绪分数
+    # 计算分数（优化权重，如 '暴涨' +3）
     for word in IMPACT_KEYWORDS['positive']:
-        score += combined_content.count(word) * 2
+        score += combined_content.count(word) * (3 if word in ['暴涨', '飙涨'] else 2)
     for word in IMPACT_KEYWORDS['neutral_positive']:
         score += combined_content.count(word) * 1
-        
     for word in IMPACT_KEYWORDS['negative']:
-        score -= combined_content.count(word) * 2
+        score -= combined_content.count(word) * (3 if word in ['暴跌', '大跌'] else 2)
     for word in IMPACT_KEYWORDS['neutral_negative']:
         score -= combined_content.count(word) * 1
 
-    # 3. 确定最终影响标签
-    if score >= 3:
+    # 确定标签
+    if score >= 4:
         impact_label = "显著利好 (Bullish)"
         impact_color = "🟢"
     elif score >= 1:
         impact_label = "潜在利好 (Positive)"
         impact_color = "🟡"
-    elif score <= -3:
+    elif score <= -4:
         impact_label = "显著利空 (Bearish)"
         impact_color = "🔴"
     elif score <= -1:
@@ -141,33 +124,21 @@ def analyze_market_impact(text, hashtags):
         impact_label = "中性/需关注 (Neutral)"
         impact_color = "⚪"
         
-    # 4. 格式化输出
-    if not impact_sectors:
-        sector_str = "未识别行业"
-    else:
-        sector_str = "、".join(list(impact_sectors))
-
-    summary = f"**市场影响** {impact_color} **{impact_label}**"
-    if impact_sectors:
-        summary += f" - 关注板块：{sector_str}"
+    sector_str = "、".join(impact_sectors) if impact_sectors else "未识别行业"
+    summary = f"**市场影响** {impact_color} **{impact_label}** - 关注板块：{sector_str}"
+    if stocks:
+        summary += f"\n**提及股票**：{', '.join(set(stocks))}"
         
     return summary
 
 # --- 实用工具函数 ---
 
 def setup_directories():
-    """设置目录并清理旧的媒体文件"""
-    # 确保主目录存在 (例如: 2025-10/09)
     os.makedirs(BASE_DIR, exist_ok=True)
-    
-    # 清理旧的媒体文件夹，确保每次运行都是全新的媒体文件
-    # 这里的清理只针对当前运行创建的媒体文件夹，防止提交时包含上一次运行的媒体文件
     if os.path.exists(MEDIA_DIR):
         shutil.rmtree(MEDIA_DIR)
     os.makedirs(MEDIA_DIR, exist_ok=True)
-
     print(f"数据将保存到目录: {BASE_DIR}")
-    
 
 def get_channel_content(username):
     """从 Telegram Web 预览页面抓取内容"""
@@ -178,7 +149,6 @@ def get_channel_content(username):
     print(f"开始抓取 Web 预览页面: {url}...")
     
     try:
-        # 设置 requests 重试机制，增强抓取稳定性
         session = requests.Session()
         retries = Retry(total=3, backoff_factor=1, status_forcelist=[429, 500, 502, 503, 504])
         session.mount('https://', HTTPAdapter(max_retries=retries))
@@ -186,10 +156,11 @@ def get_channel_content(username):
         response.raise_for_status() 
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        # 寻找所有的消息容器
-        messages = soup.find_all('div', class_='tgme_widget_message', limit=10)
+        # 优化文本提取：从 soup 直接获取完整消息
+        messages = soup.find_all('div', class_='tgme_widget_message', limit=5)  # 优化 limit=5 减少负载
         
         if not messages:
+            print(f"频道 @{username} 无消息，跳过分析。")
             return f"## 频道: @{username}（共 0 条消息）\n\n**警告:** 未找到任何消息，该频道可能不存在或启用了内容限制。\n"
 
         for message in messages:
@@ -212,17 +183,17 @@ def get_channel_content(username):
                     
                     msg_text += f"---\n**时间 (上海):** {time_sh} **(ID:** `{message_id}` **)**\n"
             
-            # 2. 提取并清理消息文本内容
+            # 2. 提取并清理消息文本内容（优化避免截断）
             text_tag = message.find('div', class_='tgme_widget_message_text')
             if text_tag:
-                # 改进文本提取，将 <br> 视为换行符，并移除空格
-                clean_text = text_tag.get_text(separator='\n', strip=True)
+                # 使用 str(text_tag).replace 完整提取
+                text_content = str(text_tag).replace('<br/>', '\n').replace('<br>', '\n')
+                clean_text = BeautifulSoup(text_content, 'html.parser').get_text(separator='\n', strip=True)
                 
             # 3. 提取并清理 Hashtag
             hashtags = re.findall(r'#\w+', clean_text)
             if hashtags:
                 msg_text += "\n**标签**: " + ", ".join(hashtags) + "\n"
-                # 从文本中移除 hashtags
                 clean_text = re.sub(r'#\w+', '', clean_text).strip()
             
             # 4. 媒体下载和标记
@@ -234,9 +205,7 @@ def get_channel_content(username):
                 
                 if url_match and message_id != 'N/A':
                     media_url = url_match.group(1)
-                    # 动态提取扩展名
                     media_extension = os.path.splitext(media_url.split('?')[0])[1] or '.jpg'
-                    
                     media_filename_relative = os.path.join('media', f"{username}_{message_id}{media_extension}")
                     media_filename_full = os.path.join(BASE_DIR, media_filename_relative)
 
@@ -245,7 +214,6 @@ def get_channel_content(username):
                         if media_response.status_code == 200:
                             with open(media_filename_full, 'wb') as f:
                                 f.write(media_response.content)
-                            # Markdown 链接使用 POSIX 风格路径 (/)
                             md_path = os.path.join(DATE_DIR, media_filename_relative).replace(os.path.sep, '/')
                             msg_text += f"\n![媒体文件]({md_path})\n"
                             downloaded_count += 1
@@ -259,18 +227,16 @@ def get_channel_content(username):
             # 5. 市场影响分析
             impact_summary = analyze_market_impact(clean_text, hashtags)
             
-            # 6. 跳过空消息（无文本且无媒体）
+            # 6. 跳过空消息
             if not clean_text and not media_tag:
                 continue
 
             # 7. 添加清理后的文本和分析结果
             if clean_text:
                 msg_text += f"\n{clean_text}\n"
-
-            # 8. 添加分析结果
             msg_text += f"\n{impact_summary}\n"
             
-            # 9. 原始消息链接
+            # 8. 原始消息链接
             if message_id != 'N/A':
                 msg_text += f"\n**[原始链接](https://t.me/{username}/{message_id})**\n"
             
@@ -287,17 +253,15 @@ def get_channel_content(username):
         print(error_msg)
         return f"## 频道: @{username}（共 0 条消息）\n\n**抓取失败 (未知错误):** {e}\n"
 
-    # 10. 添加消息计数标题
     header = f"## 频道: @{username}（共 {len(all_messages)} 条消息）\n\n"
     return header + "\n".join(all_messages)
 
 def generate_overall_summary(all_content):
-    """新增：生成整体影响总结 JSON（可选，用于外部分析）"""
-    # 提取所有影响总结
+    """生成整体影响总结 JSON"""
     impacts = re.findall(r'\*\*市场影响\*\* (🟢|🟡|🟠|🔴|⚪) \*\*(.+?)\*\*', all_content, re.DOTALL)
     sector_mentions = re.findall(r'关注板块：(.+?)(?=\n|$)', all_content)
+    stocks = re.findall(r'\*\*提及股票\*\*：(.+?)(?=\n|$)', all_content)
     
-    # 计数
     impact_counter = Counter([label for _, label in impacts])
     emoji_to_label = {'🟢': 'Bullish', '🟡': 'Positive', '🟠': 'Negative', '🔴': 'Bearish', '⚪': 'Neutral'}
     
@@ -306,7 +270,8 @@ def generate_overall_summary(all_content):
         'total_messages': len(re.findall(r'---\n\*\*时间', all_content)),
         'impact_distribution': {emoji_to_label[emoji]: count for emoji, count in impact_counter.items() if emoji in emoji_to_label},
         'top_sectors': Counter(sector_mentions).most_common(5),
-        'recommendation': '整体利好黄金/科技/美股板块，警惕稀土风险' if impact_counter['🟢'] > impact_counter['🔴'] else '中性市场，观察宏观/美股信号'
+        'top_stocks': Counter([stock for stocks_list in stocks for stock in stocks_list.split(', ')]).most_common(5),
+        'recommendation': '整体利好美股/科技/黄金板块，警惕港股/稀土风险' if impact_counter['🟢'] > impact_counter['🔴'] else '中性市场，观察宏观/美股信号'
     }
     
     json_path = FULL_FILENAME_PATH.replace('.md', '_overall_summary.json')
@@ -317,21 +282,18 @@ def generate_overall_summary(all_content):
 
 def main():
     """主函数"""
-    setup_directories() # 创建并清理目录
-
+    setup_directories()
     all_content = f"# Telegram 频道内容抓取 (Web 预览)\n\n**抓取时间 (上海):** {now_shanghai.strftime('%Y-%m-%d %H:%M:%S')}\n\n---\n"
     
     for username in CHANNEL_USERNAMES:
         channel_content = get_channel_content(username)
         all_content += channel_content
 
-    # 将所有内容写入 Markdown 文件
     with open(FULL_FILENAME_PATH, 'w', encoding='utf-8') as f:
         f.write(all_content)
         
     print(f"\n✅ 所有内容已成功保存到 **{FULL_FILENAME_PATH}** 文件中。")
     
-    # 新增：生成整体总结 JSON
     generate_overall_summary(all_content)
 
 if __name__ == '__main__':
