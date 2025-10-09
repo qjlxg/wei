@@ -67,5 +67,6 @@ jobs:
           file_pattern: |
             */*/*.md
             */*/media/*
+            */*/*.json
             
           commit_author: "GitHub Actions Bot <github-actions[bot]@users.noreply.github.com>"
