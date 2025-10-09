@@ -1,3 +1,5 @@
 requests
 jieba
 snownlp
+telethon
+pytz
