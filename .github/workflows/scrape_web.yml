@@ -1,18 +1,14 @@
-name: Telegram Web Scraper
+name: Telegram Web Scraper (自动/手动运行 - 上海时区)
 
 on:
-  # 1. 调度运行：每 30 分钟运行一次 (例如 0:30, 1:00, 1:30...)
+  # 1. 调度运行：每 30 分钟运行一次 (UTC 时间)
   schedule:
-    # cron 表达式使用 UTC 时间，所以需要进行时区转换。
-    # UTC 0:00 是上海时间 (UTC+8) 的 8:00。
-    # 表达式: "分钟 小时 日期 月份 星期"
-    # '*/30 * * * *' 表示每小时的 0 分和 30 分运行 (即每 30 分钟)
     - cron: '*/30 * * * *'
     
   # 2. 允许手动在 GitHub Actions 界面运行
   workflow_dispatch:
   
-  # 3. 在代码 push 到 main 分支时也运行 (可选，用于测试和确保依赖更新)
+  # 3. 在代码 push 到 main 分支时也运行 (可选，用于测试)
   push:
     branches:
       - main
@@ -29,30 +25,47 @@ jobs:
       TZ: Asia/Shanghai
 
     steps:
-      - name: 检出代码
+      - name: 检出代码 (Fetch Full History)
+        # 必须开启 fetch-depth: 0，以便 git-auto-commit 能看到所有历史目录结构，
+        # 并且 'find' 命令才能正确操作所有文件。
         uses: actions/checkout@v4
-
-      - name: 设置 Python 3.10
-        uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          fetch-depth: 0 
 
       - name: 安装依赖 (requests, BeautifulSoup, pytz)
         run: pip install -r requirements.txt
 
+      # =========================================================
+      # 新增步骤：清理超过 7 天的旧文件
+      # =========================================================
+      - name: 清理超过7天的文件
+        run: |
+          echo "开始清理超过 7 天的旧文件..."
+          # 查找并删除所有两层子目录下（例如 2025-10/09/）的 .md 文件
+          # -mtime +7 表示修改时间超过 7 天的文件
+          find . -type f -path '*/*/*.md' -mtime +7 -delete
+          
+          # 查找并删除所有两层子目录下 media/ 文件夹中的文件
+          find . -type f -path '*/*/media/*' -mtime +7 -delete
+          
+          # 尝试删除空的日期目录 (例如 2025-10/09)，防止空目录堆积
+          find . -type d -empty -delete
+          echo "清理完成。"
+      # =========================================================
+      
       - name: 运行 Web 抓取脚本
-        # 脚本将创建 YEAR-MONTH/DAY/ 文件结构
+        # 脚本将创建并写入新文件到 YEAR-MONTH/DAY/ 目录
         run: python scraper_web.py
         
       - name: 提交生成的 Markdown 和媒体文件
-        # 使用 git-auto-commit-action 自动提交文件
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          # 提交信息
-          commit_message: "自动抓取 [Schedule]: Telegram 内容更新 (${{ env.TZ }})"
-          # **关键更改：提交所有 YEAR-MONTH/DAY/ 结构下的文件**
+          # 提交信息将包含清理和新增文件
+          commit_message: "自动维护 [Schedule]: 清理旧文件并抓取最新内容 (${{ env.TZ }})"
+          
+          # 匹配所有两层子目录下的文件
           file_pattern: |
             */*/*.md
             */*/media/*
-          # 设置作者信息，确保提交时间戳是基于 TZ 环境变量的上海时间
+            
           commit_author: "GitHub Actions Bot <github-actions[bot]@users.noreply.github.com>"
