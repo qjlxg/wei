@@ -1,8 +1,24 @@
-name: Telegram Web Scraper (手动运行/上海时区)
+name: Telegram Web Scraper
 
 on:
-  # 允许手动在 GitHub Actions 界面运行
+  # 1. 调度运行：每 30 分钟运行一次 (例如 0:30, 1:00, 1:30...)
+  schedule:
+    # cron 表达式使用 UTC 时间，所以需要进行时区转换。
+    # UTC 0:00 是上海时间 (UTC+8) 的 8:00。
+    # 表达式: "分钟 小时 日期 月份 星期"
+    # '*/30 * * * *' 表示每小时的 0 分和 30 分运行 (即每 30 分钟)
+    - cron: '*/30 * * * *'
+    
+  # 2. 允许手动在 GitHub Actions 界面运行
   workflow_dispatch:
+  
+  # 3. 在代码 push 到 main 分支时也运行 (可选，用于测试和确保依赖更新)
+  push:
+    branches:
+      - main
+    paths:
+      - 'scraper_web.py'
+      - 'requirements.txt'
 
 jobs:
   scrape_and_save:
@@ -25,18 +41,18 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: 运行 Web 抓取脚本
+        # 脚本将创建 YEAR-MONTH/DAY/ 文件结构
         run: python scraper_web.py
         
-      # 注意：原有的 "检查 Markdown 文件" 步骤已移除，以避免 Shell 错误。
-        
-      - name: 提交生成的 Markdown 文件
+      - name: 提交生成的 Markdown 和媒体文件
         # 使用 git-auto-commit-action 自动提交文件
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           # 提交信息
-          commit_message: "自动抓取: Telegram Web 内容更新 - ${{ env.TZ }}"
-          # 提交所有 md 文件
-          file_pattern: "*.md"
-          # 设置作者信息，这将确保提交时间戳是基于 TZ 环境变量的上海时间
-          # 格式为 "Name <Email>"
+          commit_message: "自动抓取 [Schedule]: Telegram 内容更新 (${{ env.TZ }})"
+          # **关键更改：提交所有 YEAR-MONTH/DAY/ 结构下的文件**
+          file_pattern: |
+            */*/*.md
+            */*/media/*
+          # 设置作者信息，确保提交时间戳是基于 TZ 环境变量的上海时间
           commit_author: "GitHub Actions Bot <github-actions[bot]@users.noreply.github.com>"
