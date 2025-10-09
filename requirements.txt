@@ -4,3 +4,4 @@ snownlp
 telethon
 pytz
 beautifulsoup4
+urllib3
