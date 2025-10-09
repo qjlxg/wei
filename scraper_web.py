@@ -29,7 +29,13 @@ CHANNEL_USERNAMES = [
     'AshareDailyBrief',
     'niftyprox',
     'equity99',
-    'learn2trade'
+    'learn2trade',
+    'TechNews2024',        
+    'GlobalMacroReport',  
+    'ChineseStockMarket',  
+    'CommodityTradeInfo', 
+    'FinancialAnalystView',
+    'CryptoMarketUpdates'  
 ]
 # =========================================================
 # =========================================================
