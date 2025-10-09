@@ -172,7 +172,7 @@ def get_channel_content(username):
         response.raise_for_status() 
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        messages = soup.find_all('div', class_='tgme_widget_message', limit=5)
+        messages = soup.find_all('div', class_='tgme_widget_message', limit=25)
         
         if not messages:
             print(f"频道 @{username} 无消息，跳过分析。")
