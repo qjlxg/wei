@@ -1,3 +1,4 @@
+
 name: Telegram Web Scraper (手动运行/上海时区)
 
 on:
@@ -19,15 +20,22 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: 安装依赖 (requests, BeautifulSoup, pytz)
+      - name: 安装依赖
         run: pip install -r requirements.txt
 
       - name: 运行 Web 抓取脚本
         run: python scraper_web.py
         
+      - name: 检查 Markdown 文件
+        run: |
+          if [ ! -f *.md ]; then
+            echo "错误：未找到 Markdown 文件"
+            exit 1
+          fi
+
       - name: 提交生成的 Markdown 文件
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "自动抓取: Telegram Web 内容更新 - ${{ env.TZ }}"
           file_pattern: "*.md"
-          commit_options: '--date="$(TZ=${{ env.TZ }} date -u +''%Y-%m-%dT%H:%M:%SZ'')"'
+          commit_options: --date="$(date -u --date='TZ=\"Asia/Shanghai\"' +'%Y-%m-%dT%H:%M:%SZ')"
