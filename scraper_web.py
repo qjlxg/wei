@@ -14,16 +14,33 @@ from collections import Counter
 # 【配置区】要抓取的频道列表
 # =========================================================
 CHANNEL_USERNAMES = [
-    # 核心金融频道（验证活跃，中文）
-    'FinanceNewsDaily',
+    # 核心金融频道
+    'FinanceNewsDaily', 
+    'SubscriptionShare', 
+    'clsvip', 
     'ywcqdz',
-    # 新增验证活跃的中文美股频道 (2025 年活跃，内容 >50 字符)
-    'meiguxinwen',    # 美股新闻
-    'caijingus',      # 美股/宏观
-    'xueqiuus',       # 美股/社区
-    'usstockdaily',   # 美股涨幅
-    'wallstreetcn',   # 美股/全球
-    'jinrongjie'      # 美股/基金
+    # 验证有效/修正的新增频道 (中文/全球)
+    'ushasanalysis',       # 修正 ushas_analysis
+    'thesafetraderacademy', # 替换 safe_trader_academy
+    'TechNewsTodayBot',    # 替换 zh_technews
+    'MacroHub',            # 替换 MacroFinanceHub
+    'GlobalMarketUpdates', # 保留
+    'ChineseStockMarket',  # 替换 AshareDailyBrief
+    'NiftyProX',           # 修正 niftyprox
+    'equity99',
+    'learn2tradenews',     # 修正 learn2trade
+    'TechNews',            # 替换 TechNews2024
+    'GlobalMacro',         # 替换 GlobalMacroReport
+    'CommoditySignals',    # 替换 CommodityTradeInfo
+    'tfainvestments',      # 替换 FinancialAnalystView
+    'CryptoMarketUpdates',
+    # 新增验证活跃的中文美股频道 (2025 年活跃)
+    'BloombergZh',         # 彭博中文美股新闻
+    'meigucaijing',        # 美股财经
+    'usstocknews',         # 美股新闻
+    'xueqiushare',         # 雪球美股
+    'sinafinance',         # 新浪美股
+    'caijingmeigu'         # 财经美股
 ]
 # =========================================================
 
@@ -151,7 +168,7 @@ def get_channel_content(username):
         session = requests.Session()
         retries = Retry(total=3, backoff_factor=1, status_forcelist=[429, 500, 502, 503, 504])
         session.mount('https://', HTTPAdapter(max_retries=retries))
-        response = session.get(url, timeout=10)
+        response = session.get(url, timeout=15)
         response.raise_for_status() 
         soup = BeautifulSoup(response.text, 'html.parser')
         
