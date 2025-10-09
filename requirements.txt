@@ -3,3 +3,4 @@ jieba
 snownlp
 telethon
 pytz
+beautifulsoup4
