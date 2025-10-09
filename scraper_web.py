@@ -1,6 +1,7 @@
 import os
 import requests
 import re
+import shutil
 from bs4 import BeautifulSoup
 from datetime import datetime
 import pytz
@@ -16,12 +17,33 @@ CHANNEL_USERNAMES = [
 # 设置上海时区
 SH_TZ = pytz.timezone('Asia/Shanghai')
 now_shanghai = datetime.now(SH_TZ)
-# 格式化文件名，例如: 2025-10-09_11-55-20_telegram_web_content.md
-FILENAME = now_shanghai.strftime("%Y-%m-%d_%H-%M-%S_telegram_web_content.md")
 
-# 媒体文件将保存在 'media' 文件夹中
-MEDIA_DIR = 'media'
-os.makedirs(MEDIA_DIR, exist_ok=True)
+# --- 路径和文件名生成逻辑 ---
+# 1. 创建日期目录结构 (例如: 2025-10/09)
+DATE_DIR = now_shanghai.strftime("%Y-%m/%d")
+
+# 2. 完整保存路径 (例如: 2025-10/09/media)
+BASE_DIR = os.path.join(os.getcwd(), DATE_DIR)
+MEDIA_DIR = os.path.join(BASE_DIR, 'media')
+
+# 3. 文件名 (例如: 14-30-00_telegram_web_content.md)
+FILENAME_BASE = now_shanghai.strftime("%H-%M-%S_telegram_web_content.md")
+FULL_FILENAME_PATH = os.path.join(BASE_DIR, FILENAME_BASE)
+# --- 路径和文件名生成逻辑结束 ---
+
+
+def setup_directories():
+    """设置目录并清理旧的媒体文件"""
+    # 确保主目录存在 (例如: 2025-10/09)
+    os.makedirs(BASE_DIR, exist_ok=True)
+    
+    # 清理旧的媒体文件夹，确保每次运行都是全新的媒体文件
+    if os.path.exists(MEDIA_DIR):
+        shutil.rmtree(MEDIA_DIR)
+    os.makedirs(MEDIA_DIR, exist_ok=True)
+
+    print(f"数据将保存到目录: {BASE_DIR}")
+    
 
 def get_channel_content(username):
     """从 Telegram Web 预览页面抓取内容"""
@@ -36,7 +58,7 @@ def get_channel_content(username):
         soup = BeautifulSoup(response.text, 'html.parser')
         
         # 寻找所有的消息容器
-        messages = soup.find_all('div', class_='tgme_widget_message', limit=10) # 限制抓取最近10条消息
+        messages = soup.find_all('div', class_='tgme_widget_message', limit=10)
         
         if not messages:
             return f"## 频道: @{username}（共 0 条消息）\n\n**警告:** 未找到任何消息，该频道可能不存在或启用了内容限制。\n"
@@ -62,7 +84,6 @@ def get_channel_content(username):
             text_tag = message.find('div', class_='tgme_widget_message_text')
             clean_text = ""
             if text_tag:
-                # 将 <br> 标签替换为换行符
                 text_content = str(text_tag).replace('<br/>', '\n').replace('<br>', '\n')
                 clean_text = BeautifulSoup(text_content, 'html.parser').get_text(separator='\n').strip()
                 
@@ -70,10 +91,8 @@ def get_channel_content(username):
             hashtags = re.findall(r'#\w+', clean_text)
             if hashtags:
                 msg_text += "\n**标签**: " + ", ".join(hashtags) + "\n"
-                # 从文本中移除 hashtags
                 clean_text = re.sub(r'#\w+', '', clean_text).strip()
             
-            # 将清理后的文本添加到消息内容中
             if clean_text:
                 msg_text += f"\n{clean_text}\n"
 
@@ -82,30 +101,31 @@ def get_channel_content(username):
                         message.find('a', class_='tgme_widget_message_document_wrap')
             
             if media_tag and 'style' in media_tag.attrs:
-                # 尝试从 'style' 属性中提取图片 URL (仅对照片有效)
                 url_match = re.search(r'url\(["\']?(.*?)["\']?\)', media_tag['style'])
                 
                 if url_match and message_id != 'N/A':
                     media_url = url_match.group(1)
-                    media_extension = '.jpg' # 假设图片
+                    media_extension = '.jpg'
                     
-                    # 简化文件名，并保存到 media 文件夹
-                    media_filename = os.path.join(MEDIA_DIR, f"{username}_{message_id}{media_extension}")
-                    
+                    # 媒体文件相对路径，用于 Markdown 引用 (例如: media/FinanceNewsDaily_123.jpg)
+                    media_filename_relative = os.path.join('media', f"{username}_{message_id}{media_extension}")
+                    # 媒体文件绝对路径，用于文件写入
+                    media_filename_full = os.path.join(BASE_DIR, media_filename_relative)
+
                     try:
-                        # 下载媒体文件
                         media_response = requests.get(media_url, timeout=10)
                         if media_response.status_code == 200:
-                            with open(media_filename, 'wb') as f:
+                            with open(media_filename_full, 'wb') as f:
                                 f.write(media_response.content)
-                            # 在 Markdown 中嵌入图片链接
-                            msg_text += f"\n![媒体文件]({media_filename.replace(os.path.sep, '/')})\n"
+                            # Markdown 链接使用 POSIX 风格路径 (/)
+                            # 相对路径为：日期目录/media/文件名.jpg
+                            md_path = os.path.join(DATE_DIR, media_filename_relative).replace(os.path.sep, '/')
+                            msg_text += f"\n![媒体文件]({md_path})\n"
                         else:
                             msg_text += f"\n*[媒体文件下载失败: HTTP {media_response.status_code}]*\n"
                     except requests.exceptions.RequestException as download_err:
                         msg_text += f"\n*[媒体文件下载失败: {download_err}]*\n"
                 elif media_tag:
-                    # 如果不是图片或无法解析 URL，则仅提示
                     msg_text += f"\n*[包含媒体/文件，请查看原始链接] ({url})*\n"
 
             # 5. 原始消息链接
@@ -132,12 +152,8 @@ def get_channel_content(username):
 
 def main():
     """主函数"""
-    # 移除旧的媒体文件夹，确保每次运行都是全新的媒体文件
-    if os.path.exists(MEDIA_DIR):
-        import shutil
-        shutil.rmtree(MEDIA_DIR)
-        os.makedirs(MEDIA_DIR, exist_ok=True)
-        
+    setup_directories() # 创建并清理目录
+
     all_content = f"# Telegram 频道内容抓取 (Web 预览)\n\n**抓取时间 (上海):** {now_shanghai.strftime('%Y-%m-%d %H:%M:%S')}\n\n---\n"
     
     for username in CHANNEL_USERNAMES:
@@ -145,11 +161,10 @@ def main():
         all_content += channel_content
 
     # 将所有内容写入 Markdown 文件
-    with open(FILENAME, 'w', encoding='utf-8') as f:
+    with open(FULL_FILENAME_PATH, 'w', encoding='utf-8') as f:
         f.write(all_content)
         
-    print(f"\n✅ 所有内容已成功保存到根目录的 **{FILENAME}** 文件中。")
-    print(f"媒体文件保存到 **{MEDIA_DIR}** 文件夹中。")
+    print(f"\n✅ 所有内容已成功保存到 **{FULL_FILENAME_PATH}** 文件中。")
 
 if __name__ == '__main__':
     main()
