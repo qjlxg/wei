@@ -26,7 +26,10 @@ CHANNEL_USERNAMES = [
     'zh_technews', 
     'MacroFinanceHub',
     'GlobalMarketUpdates',
-    'AshareDailyBrief'
+    'AshareDailyBrief',
+    'niftyprox',
+    'equity99',
+    'learn2trade'
 ]
 # =========================================================
 # =========================================================
