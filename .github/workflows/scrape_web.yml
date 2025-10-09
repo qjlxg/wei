@@ -1,9 +1,14 @@
 name: Telegram Web Scraper (自动/手动运行 - 上海时区)
 
 on:
+  # 1. 调度运行：每 30 分钟运行一次 (UTC 时间)
   schedule:
     - cron: '*/30 * * * *'
+    
+  # 2. 允许手动在 GitHub Actions 界面运行
   workflow_dispatch:
+  
+  # 3. 在代码 push 到 main 分支时也运行 (可选，用于测试)
   push:
     branches:
       - main
@@ -14,41 +19,58 @@ on:
 jobs:
   scrape_and_save:
     runs-on: ubuntu-latest
+    
+    # 设置运行环境为上海时区
     env:
       TZ: Asia/Shanghai
 
     steps:
       - name: 检出代码 (Fetch Full History)
+        # 必须开启 fetch-depth: 0，以便 git-auto-commit 能看到所有历史目录结构
         uses: actions/checkout@v4
         with:
           fetch-depth: 0 
-
+          
       - name: 安装 Python 3.9
         uses: actions/setup-python@v5
         with:
           python-version: '3.9'
 
-      - name: 安装依赖
+      - name: 安装依赖 (requests, BeautifulSoup, pytz)
         run: pip install -r requirements.txt
 
-      - name: 清理超过 7 天的旧文件
+      # =========================================================
+      # 新增步骤：清理超过 7 天的旧文件 (已增加 .json 文件清理)
+      # =========================================================
+      - name: 清理超过7天的文件
         run: |
           echo "开始清理超过 7 天的旧文件..."
+          # 删除所有两层子目录下（例如 2025-10/09/）的 .md 文件
           find . -type f -path '*/*/*.md' -mtime +7 -delete
+          # 删除所有两层子目录下（例如 2025-10/09/）的 .json 文件
           find . -type f -path '*/*/*.json' -mtime +7 -delete
+          # 删除所有两层子目录下 media/ 文件夹中的文件
           find . -type f -path '*/*/media/*' -mtime +7 -delete
+          # 删除空的日期目录
           find . -type d -empty -delete
           echo "清理完成。"
-
+      # =========================================================
+      
       - name: 运行 Web 抓取脚本
+        # 脚本将创建并写入新文件到 YEAR-MONTH/DAY/ 目录
         run: python scraper_web.py
         
       - name: 提交生成的 Markdown、JSON 和媒体文件
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
+          # 提交信息将包含清理和新增文件
           commit_message: "自动维护 [Schedule]: 清理旧文件并抓取最新内容 (${{ env.TZ }})"
+          
+          # 使用更通用的匹配模式，确保所有新创建的文件/目录都被追踪
           file_pattern: |
-            */*/*.md
-            */*/*.json
-            */*/media/*
+            */*/*
+          
+          # 关键修正：使用 -A 选项，强制添加所有新增、修改和删除的文件
+          add_options: '-A'
+          
           commit_author: "GitHub Actions Bot <github-actions[bot]@users.noreply.github.com>"
