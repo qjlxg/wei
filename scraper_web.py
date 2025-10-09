@@ -10,6 +10,7 @@ from requests.adapters import HTTPAdapter
 # 建议同时在 requirements.txt 中包含 urllib3
 from requests.packages.urllib3.util.retry import Retry 
 import json
+from collections import Counter  # 新增：用于整体总结计数
 
 # =========================================================
 # 【配置区】要抓取的频道列表
@@ -20,12 +21,12 @@ CHANNEL_USERNAMES = [
     'SubscriptionShare', 
     'clsvip', 
     'ywcqdz',
-    # 修正/验证的有效新增频道
+    # 修正/验证的有效新增频道 (去除 0 消息)
     'ushasanalysis',       # 修正 ushas_analysis
     'thesafetraderacademy', # 替换 safe_trader_academy
     'TechNewsTodayBot',    # 替换 zh_technews
     'MacroHub',            # 替换 MacroFinanceHub
-    'GlobalMarketUpdates', # 保留，但监控
+    'GlobalMarketUpdates', # 保留
     'ChineseStockMarket',  # 替换 AshareDailyBrief
     'NiftyProX',           # 修正 niftyprox
     'equity99',
@@ -35,14 +36,13 @@ CHANNEL_USERNAMES = [
     'CommoditySignals',    # 替换 CommodityTradeInfo
     'tfainvestments',      # 替换 FinancialAnalystView
     'CryptoMarketUpdates',
-    # 新增验证活跃的美股频道 (2025 年活跃)
-    'InvestingLiveStocks', # US indices/stocks
-    'us30_stocks_signals', # US30/Dow Jones
-    'AltSignals',          # Global/US stocks
-    'UnitedSignals',       # US indices/forex
-    'WolfxSignals',        # US stocks/crypto
-    'StockGainers'         # US gainers
-
+    # 新增验证活跃的中文美股频道 (2025 年活跃)
+    'BloombergZh',         # 彭博中文美股新闻
+    'meigucaijing',        # 美股财经资讯
+    'usstocknews',         # 美股新闻
+    'xueqiushare',         # 雪球美股分享
+    'sinafinance',         # 新浪美股
+    'caijingmeigu'         # 财经美股
 ]
 # =========================================================
 # =========================================================
@@ -68,24 +68,32 @@ FULL_FILENAME_PATH = os.path.join(BASE_DIR, FILENAME_BASE)
 # --- 市场影响分析配置 ---
 IMPACT_KEYWORDS = {
     # 积极关键词 (分数 +2)
-    'positive': ['涨', '上涨', '大涨', '飙涨', '突破', '利好', '新高', '看好', '增持', '走强', '复苏', '站上', '扩大', '利多', '领先'],
+    'positive': ['涨', '上涨', '大涨', '飙涨', '突破', '利好', '新高', '看好', '增持', '走强', '复苏', '站上', '扩大', '利多', '领先', 'rally', 'surge', 'breakout'],
     # 消极关键词 (分数 -2)
-    'negative': ['跌', '下跌', '大跌', '走低', '利空', '下行', '风险', '担忧', '疲软', '收窄', '走弱', '缩减', '亏损', '做空'],
+    'negative': ['跌', '下跌', '大跌', '走低', '利空', '下行', '风险', '担忧', '疲软', '收窄', '走弱', '缩减', '亏损', '做空', 'drop', 'decline', 'correction'],
     # 中性/关注关键词 (分数 +1 或 -1)
-    'neutral_positive': ['回升', '反弹', '温和', '企稳', '放量', '回购'],
-    'neutral_negative': ['压力', '放缓', '震荡', '回调', '盘整', '高位'],
+    'neutral_positive': ['回升', '反弹', '温和', '企稳', '放量', '回购', 'rebound', 'stabilize'],
+    'neutral_negative': ['压力', '放缓', '震荡', '回调', '盘整', '高位', 'volatility', 'pullback'],
 }
 
 SECTOR_KEYWORDS = {
-    '黄金/贵金属': ['黄金', '沪金', '白银', '钯金', '金价', '贵金属'],
-    'A股/大盘': ['A股', '沪指', '深成指', '创业板', '沪深', '市场', '京三市', '北向资金'],
+    '黄金/贵金属': ['黄金', '沪金', '白银', '钯金', '金价', '贵金属', 'XAUUSD'],
+    'A股/大盘': ['A股', '沪指', '深成指', '创业板', '沪深', '市场', '京三市', '北向资金', 'Nifty'],
     '期货/大宗商品': ['期货', '棕榈油', '生猪', '鸡蛋', 'LPG', '集运', '液化天然气', '碳酸锂', '铜价', '原油', '大宗商品', '工业品'],
     '科技/半导体': ['芯片', '科创50', '中芯国际', '华虹公司', '先进封装', '内存', 'SSD', 'AI', '大模型', '算力', '半导体'],
     '新能源/储能': ['碳酸锂', '储能', '光伏', '电池级', 'HVDC', '新能源汽车', '风电'],
     '宏观/央行': ['美联储', '央行', '降息', '加息', '逆回购', 'SHIBOR', '政府预算', '美国国债', '关税', '通胀', 'GDP', 'PMI'],
     '港股/汇率': ['恒生指数', '恒指', '泰铢', '美元', '卢比', '新加坡元', '汇率', '港股', '离岸人民币'],
     '稀土': ['稀土', '出口管制'],
-    '数字货币': ['比特币', '以太坊', 'BTC', 'ETH', '加密货币', '区块链'],
+    '数字货币': ['比特币', '以太坊', 'BTC', 'ETH', '加密货币', '区块链', 'Solana'],
+    # 新增：兼容扩展频道
+    '指数/银行': ['Bank Nifty', 'Nifty', '指数', '银行股'],
+    '全球/外汇': ['外汇', 'USD', 'EUR', 'GBP', '全球市场'],
+    # 继续扩展关键词（针对基金/板块影响）
+    '基金/ETF': ['ETF', '基金', '黄金ETF', '有色ETF', '指数基金', '避险基金'],
+    '期权/交易信号': ['期权', '信号', '做多', '做空', '看涨', '看跌', '合约'],
+    # 新增：美股专属关键词
+    '美股': ['美股', 'NASDAQ', 'S&P', 'Dow', 'US30', 'AMD', 'NVDA', 'AAPL', 'Dow Jones', 'S&P 500']
 }
 
 
@@ -283,6 +291,30 @@ def get_channel_content(username):
     header = f"## 频道: @{username}（共 {len(all_messages)} 条消息）\n\n"
     return header + "\n".join(all_messages)
 
+def generate_overall_summary(all_content):
+    """新增：生成整体影响总结 JSON（可选，用于外部分析）"""
+    # 提取所有影响总结
+    impacts = re.findall(r'\*\*市场影响\*\* (🟢|🟡|🟠|🔴|⚪) \*\*(.+?)\*\*', all_content, re.DOTALL)
+    sector_mentions = re.findall(r'关注板块：(.+?)(?=\n|$)', all_content)
+    
+    # 计数
+    impact_counter = Counter([label for _, label in impacts])
+    emoji_to_label = {'🟢': 'Bullish', '🟡': 'Positive', '🟠': 'Negative', '🔴': 'Bearish', '⚪': 'Neutral'}
+    
+    summary = {
+        'timestamp': now_shanghai.strftime('%Y-%m-%d %H:%M:%S'),
+        'total_messages': len(re.findall(r'---\n\*\*时间', all_content)),
+        'impact_distribution': {emoji_to_label[emoji]: count for emoji, count in impact_counter.items() if emoji in emoji_to_label},
+        'top_sectors': Counter(sector_mentions).most_common(5),
+        'recommendation': '整体利好黄金/科技/美股板块，警惕稀土风险' if impact_counter['🟢'] > impact_counter['🔴'] else '中性市场，观察宏观/美股信号'
+    }
+    
+    json_path = FULL_FILENAME_PATH.replace('.md', '_overall_summary.json')
+    with open(json_path, 'w', encoding='utf-8') as f:
+        json.dump(summary, f, ensure_ascii=False, indent=2)
+    
+    print(f"✅ 整体总结已保存到 **{json_path}**")
+
 def main():
     """主函数"""
     setup_directories() # 创建并清理目录
@@ -298,6 +330,9 @@ def main():
         f.write(all_content)
         
     print(f"\n✅ 所有内容已成功保存到 **{FULL_FILENAME_PATH}** 文件中。")
+    
+    # 新增：生成整体总结 JSON
+    generate_overall_summary(all_content)
 
 if __name__ == '__main__':
     main()
