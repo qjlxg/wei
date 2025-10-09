@@ -9,7 +9,10 @@ CHANNEL_USERNAMES = [
     'FinanceNewsDaily', 
     'SubscriptionShare', 
     'clsvip', 
-    'ywcqdz'
+    'ywcqdz', 
+    'Rsssubscibe', 
+    'ReutersZh'
+    
 ]
 
 # 设置上海时区
