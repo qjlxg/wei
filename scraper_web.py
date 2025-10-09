@@ -13,7 +13,13 @@ CHANNEL_USERNAMES = [
     'FinanceNewsDaily', 
     'SubscriptionShare', 
     'clsvip', 
-    'ywcqdz'
+    'ywcqdz',
+    'ushas_analysis',
+    'safe_trader_academy',
+    'zh_technews', 
+    'MacroFinanceHub',
+    'GlobalMarketUpdates',
+    'AshareDailyBrief'
 ]
 
 # 设置上海时区
