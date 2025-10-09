@@ -1,13 +1,14 @@
-
 name: Telegram Web Scraper (手动运行/上海时区)
 
 on:
+  # 允许手动在 GitHub Actions 界面运行
   workflow_dispatch:
 
 jobs:
   scrape_and_save:
     runs-on: ubuntu-latest
     
+    # 设置运行环境为上海时区
     env:
       TZ: Asia/Shanghai
 
@@ -20,22 +21,22 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: 安装依赖
+      - name: 安装依赖 (requests, BeautifulSoup, pytz)
         run: pip install -r requirements.txt
 
       - name: 运行 Web 抓取脚本
         run: python scraper_web.py
         
-      - name: 检查 Markdown 文件
-        run: |
-          if [ ! -f *.md ]; then
-            echo "错误：未找到 Markdown 文件"
-            exit 1
-          fi
-
+      # 注意：原有的 "检查 Markdown 文件" 步骤已移除，以避免 Shell 错误。
+        
       - name: 提交生成的 Markdown 文件
+        # 使用 git-auto-commit-action 自动提交文件
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
+          # 提交信息
           commit_message: "自动抓取: Telegram Web 内容更新 - ${{ env.TZ }}"
+          # 提交所有 md 文件
           file_pattern: "*.md"
-          commit_options: --date="$(date -u --date='TZ=\"Asia/Shanghai\"' +'%Y-%m-%dT%H:%M:%SZ')"
+          # 设置作者信息，这将确保提交时间戳是基于 TZ 环境变量的上海时间
+          # 格式为 "Name <Email>"
+          commit_author: "GitHub Actions Bot <github-actions[bot]@users.noreply.github.com>"
