@@ -20,22 +20,29 @@ CHANNEL_USERNAMES = [
     'SubscriptionShare', 
     'clsvip', 
     'ywcqdz',
-    # 新增的分析与科技频道
-    'ushas_analysis',
-    'safe_trader_academy',
-    'zh_technews', 
-    'MacroFinanceHub',
-    'GlobalMarketUpdates',
-    'AshareDailyBrief',
-    'niftyprox',
+    # 修正/验证的有效新增频道
+    'ushasanalysis',       # 修正 ushas_analysis
+    'thesafetraderacademy', # 替换 safe_trader_academy
+    'TechNewsTodayBot',    # 替换 zh_technews
+    'MacroHub',            # 替换 MacroFinanceHub
+    'GlobalMarketUpdates', # 保留，但监控
+    'ChineseStockMarket',  # 替换 AshareDailyBrief
+    'NiftyProX',           # 修正 niftyprox
     'equity99',
-    'learn2trade',
-    'TechNews2024',        
-    'GlobalMacroReport',  
-    'ChineseStockMarket',  
-    'CommodityTradeInfo', 
-    'FinancialAnalystView',
-    'CryptoMarketUpdates'  
+    'learn2tradenews',     # 修正 learn2trade
+    'TechNews',            # 替换 TechNews2024
+    'GlobalMacro',         # 替换 GlobalMacroReport
+    'CommoditySignals',    # 替换 CommodityTradeInfo
+    'tfainvestments',      # 替换 FinancialAnalystView
+    'CryptoMarketUpdates',
+    # 新增验证活跃的美股频道 (2025 年活跃)
+    'InvestingLiveStocks', # US indices/stocks
+    'us30_stocks_signals', # US30/Dow Jones
+    'AltSignals',          # Global/US stocks
+    'UnitedSignals',       # US indices/forex
+    'WolfxSignals',        # US stocks/crypto
+    'StockGainers'         # US gainers
+
 ]
 # =========================================================
 # =========================================================
