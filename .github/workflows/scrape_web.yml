@@ -1,14 +1,12 @@
 name: Telegram Web Scraper (手动运行/上海时区)
 
 on:
-  # 允许手动在 GitHub Actions 界面运行
   workflow_dispatch:
 
 jobs:
   scrape_and_save:
     runs-on: ubuntu-latest
     
-    # 设置运行环境为上海时区
     env:
       TZ: Asia/Shanghai
 
@@ -21,19 +19,15 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: 安装依赖 (requests, BeautifulSoup)
+      - name: 安装依赖 (requests, BeautifulSoup, pytz)
         run: pip install -r requirements.txt
 
       - name: 运行 Web 抓取脚本
-        # 注意: 这里运行的是 scraper_web.py 脚本
         run: python scraper_web.py
         
       - name: 提交生成的 Markdown 文件
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          # 使用脚本生成的动态文件名
           commit_message: "自动抓取: Telegram Web 内容更新 - ${{ env.TZ }}"
-          # 自动提交所有变更，包括新生成的 md 文件
           file_pattern: "*.md"
-          # 设置时区，确保 commit time 也是上海时间
-          commit_options: '--date="${{ format(github.event.repository.updated_at, 'yyyy-MM-ddTHH:mm:ssZ') }}"'
+          commit_options: '--date="$(TZ=${{ env.TZ }} date -u +''%Y-%m-%dT%H:%M:%SZ'')"'
