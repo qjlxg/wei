@@ -22,7 +22,7 @@ CHANNEL_USERNAMES = [
     'clsvip', 
     'ywcqdz',
     # 验证有效/修正的新增频道 (中文/全球)
-    'ushasanalysis',       # 修正 ushas_analysis
+   
     'thesafetraderacademy', # 替换 safe_trader_academy
     'TechNewsTodayBot',    # 替换 zh_technews
     'MacroHub',            # 替换 MacroFinanceHub
