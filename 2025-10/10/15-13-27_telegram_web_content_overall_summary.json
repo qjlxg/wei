@@ -1,0 +1,28 @@
+{
+  "timestamp": "2025-10-10 15:13:27",
+  "total_messages": 144,
+  "impact_distribution": {},
+  "top_sectors_by_mention": [
+    [
+      "科技/半导体",
+      26
+    ],
+    [
+      "A股/大盘",
+      22
+    ],
+    [
+      "港股/汇率",
+      19
+    ],
+    [
+      "全球/外汇",
+      16
+    ],
+    [
+      "宏观/央行",
+      15
+    ]
+  ],
+  "overall_recommendation": "市场情绪均衡或中性，建议观察宏观政策或美股动向。"
+}
