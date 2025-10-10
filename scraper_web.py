@@ -6,48 +6,10 @@ from bs4 import BeautifulSoup
 from datetime import datetime
 import pytz
 from requests.adapters import HTTPAdapter
-# 注意：这里我们使用 requests.packages 兼容旧版本，
-# 建议同时在 requirements.txt 中包含 urllib3
 from requests.packages.urllib3.util.retry import Retry 
 import json
 from collections import Counter 
-
-# =========================================================
-# 【配置区】要抓取的频道列表 (共 24 个频道)
-# =========================================================
-CHANNEL_USERNAMES = [
-    # 核心金融频道
-    'FinanceNewsDaily', 
-    
-    'clsvip', 
-    'ywcqdz',
-    # 验证有效/修正的新增频道 (中文/全球)
-   
-    'thesafetraderacademy', # 替换 safe_trader_academy
-    'TechNewsTodayBot',    # 替换 zh_technews
-    'MacroHub',            # 替换 MacroFinanceHub
-    'GlobalMarketUpdates', # 保留
-    'ChineseStockMarket',  # 替换 AshareDailyBrief
-    'NiftyProX',           # 修正 niftyprox
-    'equity99',
-    'learn2tradenews',     # 修正 learn2trade
-    'TechNews',            # 替换 TechNews2024
-    'GlobalMacro',         # 替换 GlobalMacroReport
-    'CommoditySignals',    # 替换 CommodityTradeInfo
-    'tfainvestments',      # 替换 FinancialAnalystView
-    'CryptoMarketUpdates',
-    # 新增验证活跃的中文美股频道 (2025 年活跃)
-    'BloombergZh',         # 彭博中文美股新闻
-    'meigucaijing',        # 美股财经
-    'usstocknews',         # 美股新闻
-    'xueqiushare',         # 雪球美股
-    'sinafinance',         # 新浪美股
-    'caijingmeigu'         # 财经美股
-]
-# =========================================================
-# =========================================================
-
-
+CHANNEL_USERNAMES = ['FinanceNewsDaily','clsvip','ywcqdz']
 # 设置上海时区
 SH_TZ = pytz.timezone('Asia/Shanghai')
 now_shanghai = datetime.now(SH_TZ)
