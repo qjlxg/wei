@@ -1,4 +1,4 @@
-name: Telegram Web Scraper (自动/手动运行 - 上海时区)
+name: Telegram Web Scraper 
 
 on:
   # 1. 调度运行：每 30 分钟运行一次 (UTC 时间)
