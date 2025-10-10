@@ -1,14 +1,14 @@
 name: Telegram Web Scraper (自动/手动运行 - 上海时区)
 
 on:
-
+  # 1. 调度运行：每 30 分钟运行一次 (UTC 时间)
   schedule:
     - cron: '*/130 * * * *'
     
-
+  # 2. 允许手动在 GitHub Actions 界面运行
   workflow_dispatch:
   
-
+  # 3. 在代码 push 到 main 分支时也运行 (可选，用于测试)
   push:
     branches:
       - main
@@ -47,23 +47,19 @@ jobs:
           echo "开始清理超过 7 天的旧文件..."
           # 只保留对 .md 文件的清理
           find . -type f -path '*/*/*.md' -mtime +7 -delete
-          # 移除 .json 和 media/ 文件的清理
           # 删除空的日期目录
           find . -type d -empty -delete
           echo "清理完成。"
       # =========================================================
       
       - name: 运行 Web 抓取脚本
-        # 脚本将创建并写入新文件到 YEAR-MONTH/DAY/ 目录
         run: python scraper_web.py
         
       - name: 提交生成的 Markdown 文件
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          # 提交信息将包含清理和新增文件
           commit_message: "自动维护 [Schedule]: 清理旧文件并抓取最新内容 (${{ env.TZ }})"
           
-          # 使用更通用的匹配模式，确保所有新创建的文件/目录都被追踪
           file_pattern: |
             */*/*.md
             */*/*
@@ -73,5 +69,5 @@ jobs:
           
           commit_author: "GitHub Actions Bot <github-actions[bot]@users.noreply.github.com>"
           
-          # ⭐ 核心修正：添加 --rebase 选项，解决推送时非快进式 (non-fast-forward) 冲突
-          commit_options: '--no-verify --allow-empty --rebase'
+          # ⭐ 核心修正：使用 pull_options: '--rebase' 在推送前先拉取并变基，解决冲突
+          pull_options: '--rebase'
