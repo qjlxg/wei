@@ -1,0 +1,68 @@
+name: 🖼️ Download Bing Daily Image
+# 1. 触发条件
+on:
+  # 手动触发：允许用户在 GitHub Actions 界面点击按钮运行
+  workflow_dispatch:
+ 
+  # 文件变动触发：脚本或工作流文件变动时自动运行
+  push:
+    paths:
+      - 'download_bing_images.py'
+      - '.github/workflows/bing_wallpaper.yml'
+ 
+  # 定时触发：每日定时运行 (cron 表达式使用 UTC 时间)
+  # '0 2 * * *' 对应 UTC 2:00，即上海时区 (UTC+8) 的每天上午 10:00
+  schedule:
+    - cron: '0 2 * * *'
+# 2. 环境变量 (用于确保 Git 提交时间戳和脚本的时区一致)
+env:
+  TZ: Asia/Shanghai
+ 
+# 3. 作业 (Jobs)
+jobs:
+  download_and_commit:
+    runs-on: ubuntu-latest
+   
+    steps:
+      # 步骤 1: 检出代码
+      - name: ⬇️ Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # 获取所有历史记录，用于后续 Git 操作
+      # 步骤 2: 设置 Python 环境
+      - name: ⚙️ Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+      # 步骤 3: 安装依赖 (requests 和 beautifulsoup4)
+      - name: 📦 Install dependencies
+        run: pip install requests beautifulsoup4
+      # 步骤 4: 运行下载脚本
+      - name: 🚀 Run download script
+        run: python download_bing_images.py
+      # 步骤 5: 配置 Git
+      - name: 👤 Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+         
+      # 步骤 6: 检查是否有新的图片文件或变动
+      - name: 🔍 Check for changes
+        id: git_status
+        run: |
+          # 检查是否有新增或修改的文件（包括 untracked files）
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "commit_needed=true" >> $GITHUB_OUTPUT
+          else
+            echo "commit_needed=false" >> $GITHUB_OUTPUT
+          fi
+         
+      # 步骤 7: 提交和推送 (仅在有新文件时执行)
+      - name: 📤 Commit and Push if needed
+        if: steps.git_status.outputs.commit_needed == 'true'
+        run: |
+          git add .
+          # 使用上海时区的时间生成提交信息
+          COMMIT_TIME=$(TZ=Asia/Shanghai date +"%Y-%m-%d %H:%M:%S")
+          git commit -m "🖼️ Bing Daily Image: ${COMMIT_TIME} (Shanghai)"
+          git push
