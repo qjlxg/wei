@@ -34,9 +34,9 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: '3.x'
-      # 步骤 3: 安装依赖 (requests 和 beautifulsoup4)
-      - name: 📦 Install dependencies
-        run: pip install requests beautifulsoup4
+      # 步骤 3: 安装依赖 (requests)
+      - name: 📦 Install requests dependency
+        run: pip install requests
       # 步骤 4: 运行下载脚本
       - name: 🚀 Run download script
         run: python download_bing_images.py
