@@ -1,7 +1,7 @@
 import requests
 import datetime
 import os
-import time
+import re
 
 # Bing 图片 API
 BING_API_URL = "https://www.bing.com/HPImageArchive.aspx?format=js&idx={}&n={}&mkt=zh-CN"
@@ -19,14 +19,26 @@ def get_image_data(index, count):
     url = BING_API_URL.format(index, count)
     try:
         response = requests.get(url)
-        response.raise_for_status() # 检查HTTP错误
+        response.raise_for_status()
         return response.json().get('images', [])
     except requests.RequestException as e:
         print(f"Error fetching data from Bing API at index {index}: {e}")
         return []
 
+def sanitize_filename(filename):
+    """清理文件名中的非法字符，保留中文和常见标点符号"""
+    # 移除文件路径中的非法字符（例如 \ / : * ? " < > |）
+    # 同时将文件名中的空格替换为下划线，提高跨平台兼容性
+    
+    # 替换所有不可用于文件名的特殊字符为空格
+    safe_name = re.sub(r'[\\/:*?"<>|]', ' ', filename)
+    # 将多个空格替换为一个下划线
+    safe_name = re.sub(r'\s+', '_', safe_name).strip('_')
+    
+    return safe_name
+
 def download_image(base_url, start_date, title):
-    """下载图片并保存到以年/月命名的目录中，文件名包含时间戳和标题"""
+    """下载图片并保存到以年/月命名的目录中，文件名包含时间戳和清理后的标题"""
     # 构造完整图片 URL
     image_url = f"https://www.bing.com{base_url}_{RESOLUTION}.jpg"
     
@@ -38,8 +50,10 @@ def download_image(base_url, start_date, title):
     target_dir = os.path.join(OUTPUT_DIR, year, month)
     os.makedirs(target_dir, exist_ok=True)
     
-    # 文件名: 年月日_时间戳_标题.jpg
-    safe_title = "".join(c for c in title if c.isalnum() or c in (' ', '_')).rstrip().replace(' ', '_')
+    # 清理标题，以保证操作系统兼容性，但保留原始标题主体
+    safe_title = sanitize_filename(title)
+    
+    # 文件名: 年月日_时间戳_清理后的原始标题.jpg
     timestamp = start_date.strftime('%Y%m%d_%H%M%S')
     filename = f"{timestamp}_{safe_title}.jpg"
     filepath = os.path.join(target_dir, filename)
@@ -73,19 +87,30 @@ def main():
     downloaded_count = 0
     
     for img_data in images:
-        hdate_str = img_data.get('hdate') 
-        utctime_str = img_data.get('utctime') 
+        hdate_str = img_data.get('hdate') # 格式: YYYYMMDD
+        utctime_str = img_data.get('utctime') # 格式: YYYYMMDDHHMM (可能缺失)
+        # 获取原始标题，包括版权信息
         title = img_data.get('copyright', 'bing_wallpaper')
         
-        if not hdate_str or not utctime_str:
-            print(f"Skipping image due to missing date/time info: {title}")
+        if not hdate_str:
+            print(f"Skipping image due to missing hdate info: {title}")
             continue
 
         try:
-            # 解析日期和时间 (UTC)
-            utc_datetime = datetime.datetime.strptime(utctime_str, '%Y%m%d%H%M').replace(tzinfo=datetime.timezone.utc)
-            # 转换为上海时区
-            shanghai_datetime = utc_datetime.astimezone(SHANGHAI_TZ)
+            shanghai_datetime = None
+            
+            if utctime_str:
+                # 方案 A: 如果 utctime 存在，按原逻辑处理
+                # 解析日期和时间 (UTC)
+                utc_datetime = datetime.datetime.strptime(utctime_str, '%Y%m%d%H%M').replace(tzinfo=datetime.timezone.utc)
+                # 转换为上海时区
+                shanghai_datetime = utc_datetime.astimezone(SHANGHAI_TZ)
+            else:
+                # 方案 B: 如果 utctime 缺失，使用 hdate 和上海午夜时间作为时间戳
+                print(f"Warning: utctime missing for {title}. Using hdate with 00:00:00 Shanghai time.")
+                # 构造一个上海时区的午夜时间
+                shanghai_date = datetime.datetime.strptime(hdate_str, '%Y%m%d')
+                shanghai_datetime = SHANGHAI_TZ.localize(shanghai_date)
             
             # 下载图片
             if download_image(img_data['urlbase'], shanghai_datetime, title):
