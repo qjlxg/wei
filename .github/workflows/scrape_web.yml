@@ -1,9 +1,9 @@
 name: Telegram Web Scraper (自动/手动运行 - 上海时区)
 
 on:
-  # 1. 调度运行：每 30 分钟运行一次 (UTC 时间)
+  
   schedule:
-    - cron: '*/130 * * * *'
+    - cron: '*/1445 * * * *'
     
   # 2. 允许手动在 GitHub Actions 界面运行
   workflow_dispatch:
