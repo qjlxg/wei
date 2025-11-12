@@ -1,44 +1,18 @@
 import requests
-import json
 import os
 import re
 from datetime import datetime
-import random # 新增：用于打乱 ID 列表
+import random 
 
 # --- 配置 ---
 
-# 1. 图像 ID 列表（从 Gist 提取，200+ 个）
-# 注意：列表应保持在文件顶部，便于维护
-IMAGE_IDS = [
-    "1893", "5078", "6587", "6256", "1574", "1779", "7012", "6283", "1617", "2212", 
-    "1545", "2195", "1946", "1565", "1087", "2259", "5423", "6153", "1105", "1064", 
-    "2274", "1860", "1902", "1904", "5484", "2011", "6443", "1394", "1527", "1652", 
-    "1728", "1730", "1374", "5984", "6441", "6311", "1049", "6204", "2001", "1986", 
-    "5529", "2062", "1280", "2068", "5945", "1077", "5479", "6387", "1582", "6102", 
-    "1540", "1267", "5577", "1066", "6262", "7013", "1423", "1839", "6069", "6346", 
-    "5761", "2413", "2041", "1381", "6565", "1135", "1787", "6208", "1501", "2280", 
-    "2131", "1399", "1161", "1385", "5052", "1832", "1172", "6231", "1131", "1506", 
-    "2091", "2021", "2051", "5862", "2403", "1398", "2048", "1816", "2058", "5770", 
-    "1353", "6025", "6374", "1774", "6136", "1071", "2167", "2416", "5334", "1785", 
-    "5105", "1811", "5237", "2410", "2329", "1698", "1516", "5082", "2272", "5829", 
-    "5228", "6436", "1292", "5480", "1763", "5007", "6141", "5016", "2303", "1987", 
-    "1230", "1057", "1197", "5626", "2034", "2295", "5073", "1775", "2045", "1955", 
-    "2407", "1845", "2156", "5536", "6170", "1964", "1646", "1251", "6137", "1669", 
-    "1067", "1427", "2081", "5636", "1687", "5255", "2228", "5689", "6234", "1960", 
-    "6120", "6347", "5338", "1538", "2260", "5167", "1909", "1550", "2426", "1885", 
-    "6059", "1630", "2318", "6065", "6205", "2292", "1268", "5741", "1639", "5012", 
-    "5822", "6229", "2411", "1894", "2052", "6121", "1006", "6589", "5836", "6341", 
-    "1738", "5941", "6202", "6213", "2159", "2443", "1359", "1084", "5676", "5612", 
-    "2388", "2116", "1128", "2231", "1560", "1139", "6079", "1098", "1883", "1512", 
-    "1127", "2360", "7023", "1255", "5502", "6183", "7009", "5588", "1684", "1048", 
-    "6160", "1771", "2264", "1920", "6325", "6320", "1796", "5511", "7017", "1713", 
-    "1543", "2294", "6465", "1664", "6358", "5053", "1138", "2377", "6045"
-]
+# 1. Gist URL 配置 (用于动态获取 ID 列表)
+GIST_URL = "https://gist.githubusercontent.com/jzc/2d353c7e0815f6059642c9445919e7de/raw/187f6beacd3abf0fad991c0b7e89c4a2635b15dd/urls.txt"
 
-# 2. 图片托管基础 URL (新的静态 URL)
+# 2. 图片托管基础 URL
 IMAGE_BASE_URL = "https://www.gstatic.com/prettyearth/assets/full/"
 
-# 3. 要下载图片的数量（从列表中选取前 N 个）
+# 3. 要下载图片的数量（0 表示所有，如果设为 8，则每次运行下载 8 张不同的图片）
 NUM_IMAGES_TO_FETCH = 8
 
 # 4. 目标文件夹的根目录
@@ -46,9 +20,28 @@ BASE_OUTPUT_DIR = "google_earthview_wallpapers"
 
 # ----------------
 
+def fetch_and_extract_ids(url):
+    """从 Gist URL 获取内容，并提取所有 ID"""
+    print(f"Fetching IDs from: {url}")
+    try:
+        response = requests.get(url, timeout=15)
+        response.raise_for_status() # 检查 4xx/5xx 错误
+        
+        # 使用正则表达式查找 /full/ 后跟数字，直到 .jpg
+        content = response.text
+        ids = re.findall(r'/full/(\d+)\.jpg', content) 
+        
+        # 返回去重后的 ID 列表
+        unique_ids = list(set(ids))
+        print(f"Successfully fetched {len(unique_ids)} unique IDs.")
+        return unique_ids
+        
+    except requests.RequestException as e:
+        print(f"Error fetching Gist content: {e}")
+        return []
+
 def sanitize_filename(filename):
-    """清理文件名中的非法字符"""
-    # 由于不再有 title/slug，此函数不再严格需要，但保留以防未来使用
+    """清理文件名中的非法字符 (不再严格需要，但保留以防未来扩展)"""
     safe_name = re.sub(r'[\\/:*?"<>|]', ' ', filename)
     safe_name = re.sub(r'\s+', '_', safe_name).strip('_')
     return safe_name
@@ -62,7 +55,7 @@ def download_image(image_url, id):
     
     os.makedirs(current_output_dir, exist_ok=True)
     
-    # 文件名: ID.jpg (因为没有标题信息)
+    # 文件名: ID.jpg
     filename = f"{id}.jpg"
     filepath = os.path.join(current_output_dir, filename)
     
@@ -88,16 +81,24 @@ def download_image(image_url, id):
 def main():
     """主函数 - 循环下载 Google Earth View 壁纸"""
     
+    # 动态获取 ID 列表
+    all_image_ids = fetch_and_extract_ids(GIST_URL)
+    
+    if not all_image_ids:
+        print("Fatal: Could not fetch image IDs. Exiting.")
+        set_action_output(False)
+        return
+
     downloaded_count = 0
     new_files_downloaded = False
     
     # 随机化 ID 列表，确保每次运行下载不同的图片
-    ids_to_fetch = IMAGE_IDS[:]
-    random.shuffle(ids_to_fetch)
+    random.shuffle(all_image_ids)
     
     # 根据限制裁剪列表
+    ids_to_fetch = all_image_ids
     if NUM_IMAGES_TO_FETCH > 0:
-        ids_to_fetch = ids_to_fetch[:NUM_IMAGES_TO_FETCH]
+        ids_to_fetch = all_image_ids[:NUM_IMAGES_TO_FETCH]
     
     print(f"Attempting to fetch {len(ids_to_fetch)} images from Gstatic server.")
     
@@ -124,6 +125,7 @@ def set_action_output(new_files_downloaded):
         with open(os.environ["GITHUB_OUTPUT"], "a") as f:
             f.write(f"{output_key}={output_value}\n")
     else:
+        # 本地测试 Fallback
         print(f"Output for Actions: {output_key}={output_value}") 
 
 if __name__ == "__main__":
