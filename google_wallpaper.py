@@ -12,8 +12,8 @@ GIST_URL = "https://gist.githubusercontent.com/jzc/2d353c7e0815f6059642c9445919e
 # 2. 图片托管基础 URL
 IMAGE_BASE_URL = "https://www.gstatic.com/prettyearth/assets/full/"
 
-# 3. 要下载图片的数量（0 表示所有，如果设为 8，则每次运行下载 8 张不同的图片）
-NUM_IMAGES_TO_FETCH = 8
+# 3. **修改点：** 将数量设置为 0，表示下载全部 ID
+NUM_IMAGES_TO_FETCH = 0 
 
 # 4. 目标文件夹的根目录
 BASE_OUTPUT_DIR = "google_earthview_wallpapers"
@@ -41,7 +41,7 @@ def fetch_and_extract_ids(url):
         return []
 
 def sanitize_filename(filename):
-    """清理文件名中的非法字符 (不再严格需要，但保留以防未来扩展)"""
+    """清理文件名中的非法字符 (保留以防未来扩展)"""
     safe_name = re.sub(r'[\\/:*?"<>|]', ' ', filename)
     safe_name = re.sub(r'\s+', '_', safe_name).strip('_')
     return safe_name
@@ -60,6 +60,7 @@ def download_image(image_url, id):
     filepath = os.path.join(current_output_dir, filename)
     
     if os.path.exists(filepath):
+        # 即使下载全部，也会跳过已存在的文件，避免重复下载和浪费带宽
         print(f"File already exists: {filepath}. Skipping download.")
         return False
         
@@ -92,10 +93,11 @@ def main():
     downloaded_count = 0
     new_files_downloaded = False
     
-    # 随机化 ID 列表，确保每次运行下载不同的图片
+    # 随机化 ID 列表，以防多次运行后网络中断，可以继续从不同的 ID 开始
     random.shuffle(all_image_ids)
     
-    # 根据限制裁剪列表
+    # **核心逻辑：** 如果 NUM_IMAGES_TO_FETCH > 0，则裁剪列表。
+    # 由于我们设置 NUM_IMAGES_TO_FETCH = 0，所以 ids_to_fetch 将是完整的列表。
     ids_to_fetch = all_image_ids
     if NUM_IMAGES_TO_FETCH > 0:
         ids_to_fetch = all_image_ids[:NUM_IMAGES_TO_FETCH]
@@ -103,7 +105,7 @@ def main():
     print(f"Attempting to fetch {len(ids_to_fetch)} images from Gstatic server.")
     
     for image_id in ids_to_fetch:
-        # 构造新的下载 URL
+        # 构造下载 URL
         image_url = f"{IMAGE_BASE_URL}{image_id}.jpg"
         
         # 下载
@@ -113,7 +115,7 @@ def main():
             
     print(f"Script finished. Total images downloaded: {downloaded_count}")
     
-    # 将最终状态传递给 GitHub Actions (Environment File 修复)
+    # 将最终状态传递给 GitHub Actions
     set_action_output(new_files_downloaded)
 
 def set_action_output(new_files_downloaded):
@@ -125,7 +127,6 @@ def set_action_output(new_files_downloaded):
         with open(os.environ["GITHUB_OUTPUT"], "a") as f:
             f.write(f"{output_key}={output_value}\n")
     else:
-        # 本地测试 Fallback
         print(f"Output for Actions: {output_key}={output_value}") 
 
 if __name__ == "__main__":
