@@ -40,12 +40,13 @@ def download_image(image_url, title, date):
     
     os.makedirs(current_output_dir, exist_ok=True)
     
-    # 文件名: YYYY-MM-DD_标题.jpg
-    # 标题可能包含特殊字符，但我们主要依赖日期和ID，这里只使用日期
-    filename = f"{date}_{title}.replace(' ', '_')}.jpg"
+    # **修复后的代码：正确的 F-string 语法和文件名清理**
+    # 构造原始文件名: YYYY-MM-DD_标题.jpg
+    title_safe = title.replace(' ', '_').replace('/', '_')
+    raw_filename = f"{date}_{title_safe}.jpg"
     
-    # 移除文件名中可能包含的问号等
-    safe_filename = "".join(c for c in filename if c.isalnum() or c in ('_', '.', '-')).rstrip()
+    # 严格移除文件名中所有非法或不必要的字符，确保文件系统兼容性
+    safe_filename = "".join(c for c in raw_filename if c.isalnum() or c in ('_', '.', '-')).rstrip()
     filepath = os.path.join(current_output_dir, safe_filename)
     
     if os.path.exists(filepath):
@@ -72,7 +73,8 @@ def main():
     
     api_key = os.environ.get(API_KEY_ENV_VAR)
     if not api_key:
-        print(f"FATAL: {API_KEY_ENV_VAR} environment variable not set. Exiting.")
+        print(f"FATAL: {API_KEY_ENV_VAR} environment variable not set. Please set the Secret to DEMO_KEY.")
+        set_action_output(False)
         sys.exit(1)
 
     params = {
