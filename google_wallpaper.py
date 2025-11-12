@@ -8,8 +8,8 @@ from datetime import datetime
 # 1. API 基础 URL
 BASE_URL = "https://earthview.withgoogle.com"
 
-# 2. 初始硬编码 API 点 (如果失效，脚本会尝试自动获取一个新的)
-START_API = "/_api/mount-fuji-japan-4927.json" 
+# 2. 初始硬编码 API 点 (根据用户确认，使用 1893 链接)
+START_API = "/_api/lipie-lubaczow-county-poland-1893.json" 
 
 # 3. 随机 API 终点（用于动态发现，如果硬编码起点失效）
 RANDOM_API = "/random.json" 
@@ -41,15 +41,15 @@ def get_valid_start_api(initial_api):
         if response.status_code == 200:
             print(f"Found valid starting API: {api_to_check}")
             return api_to_check
+        else:
+            print(f"Initial API {api_to_check} returned status {response.status_code}. Attempting fallback...")
     except requests.RequestException:
+        print(f"Initial API {api_to_check} failed to connect. Attempting fallback...")
         pass  # 忽略错误，继续尝试随机 API
-
-    print(f"Initial API {initial_api} failed. Attempting to get random API...")
 
     # 第二次尝试：从 /random.json 获取一个新的 API
     try:
         random_url = BASE_URL + RANDOM_API
-        # 注意: /random.json 实际上会返回一个 JSON，其中包含 nextApi 字段
         response = requests.get(random_url, timeout=10)
         response.raise_for_status()
         data = json.loads(response.content)
@@ -58,7 +58,7 @@ def get_valid_start_api(initial_api):
         new_api = data.get("nextApi") or data.get("selfApi")
         
         if new_api and new_api.startswith("/_api/"):
-            print(f"Successfully retrieved new starting API: {new_api}")
+            print(f"Successfully retrieved new starting API via fallback: {new_api}")
             return new_api
             
     except (requests.RequestException, json.JSONDecodeError, AttributeError) as e:
@@ -171,15 +171,16 @@ def main():
     set_action_output(new_files_downloaded)
 
 def set_action_output(new_files_downloaded):
-    """使用 Environment File 输出状态给 GitHub Actions"""
+    """使用 Environment File 输出状态给 GitHub Actions (修复弃用警告)"""
     output_key = "commit_needed"
     output_value = "true" if new_files_downloaded else "false"
     
+    # 检查 GITHUB_OUTPUT 环境变量是否存在
     if os.environ.get("GITHUB_OUTPUT"):
         with open(os.environ["GITHUB_OUTPUT"], "a") as f:
             f.write(f"{output_key}={output_value}\n")
     else:
-        # Fallback for local testing
+        # 本地测试 Fallback
         print(f"Output for Actions: {output_key}={output_value}") 
 
 if __name__ == "__main__":
