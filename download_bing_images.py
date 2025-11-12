@@ -7,28 +7,29 @@ import re
 # 1. API 基础 URL
 BING_API_URL_BASE = "https://www.bing.com/HPImageArchive.aspx?format=js&idx={}&n={}&mkt={}"
 
-# 2. 【扩展后的全球市场列表 - V5.1】
-# 包含更多欧洲、亚洲、中东、非洲和美洲的市场
+# --- V5.2 最终合并版 MARKETS_TO_CHECK ---
 MARKETS_TO_CHECK = [
-    # 亚洲及太平洋地区 (Asia/Pacific) - (30+ 个)
+    # 亚洲及太平洋地区 (Asia/Pacific) - (约 35 个)
     "zh-CN", "zh-HK", "zh-TW", "ja-JP", "ko-KR", "en-IN", "en-AU", "en-NZ", "en-MY", 
-    "en-PH", "en-SG", "en-ID", "en-TH", "th-TH", "ms-MY", "vi-VN", "bn-IN", "hi-IN",
-    "en-PK", "en-BD", "en-LK", "en-AE", "en-BH", "en-KW", "en-OM", "en-QA", 
-    "en-SA", "en-IL", "en-LB", "en-JO", "en-CY",
+    "en-PH", "en-SG", "en-ID", "th-TH", "vi-VN", "id-ID", "ms-MY", "hi-IN", "bn-IN", 
+    "ta-IN", "en-TH", "en-PK", "en-BD", "en-LK", 
     
-    # 欧洲地区 (Europe) - (约 20 个)
+    # 欧洲地区 (Europe) - (约 30 个)
     "en-GB", "de-DE", "fr-FR", "es-ES", "it-IT", "nl-NL", "sv-SE", "ru-RU", "tr-TR", 
     "pt-PT", "da-DK", "de-AT", "de-CH", "fi-FI", "fr-BE", "fr-CH", "nl-BE", "no-NO", 
-    "pl-PL", "el-GR", "hu-HU", "cs-CZ", "sk-SK", "ro-RO", "bg-BG", "uk-UA",
+    "pl-PL", "bg-BG", "cs-CZ", "el-GR", "hu-HU", "ro-RO", "sk-SK", "sl-SI", "hr-HR", 
+    "lt-LT", "lv-LV", "et-EE", "uk-UA", "en-IE",
     
-    # 美洲地区 (The Americas) - (约 15 个)
+    # 美洲地区 (The Americas) - (约 20 个)
     "en-US", "en-CA", "es-MX", "pt-BR", "es-AR", "es-CL", "es-US", "fr-CA", 
-    "es-CO", "es-PE", "es-VE", "es-PR", "es-EC", "es-UY", "es-DO",
+    "es-CO", "es-PE", "es-VE", "es-EC", "es-BO", "es-PY", "es-UY", "es-PR", "es-DO", 
     
-    # 中东及非洲地区 (Middle East/Africa) - (约 10 个)
-    "en-ZA", "ar-XA", "ar-SA", "ar-EG", "fr-MA", "fr-DZ", "fr-TN", "en-EG", "en-NG", 
-    "en-KE", 
+    # 中东及非洲地区 (Middle East/Africa) - (约 20 个)
+    "en-ZA", "ar-XA", "ar-SA", "ar-AE", "ar-EG", "ar-MA", "he-IL", "fr-DZ", "fr-MA", 
+    "en-KE", "en-NG", "sw-KE", "pt-AO", "ar-IQ", "ar-JO", "en-AE", "en-BH", "en-KW", 
+    "en-OM", "en-QA", "en-SA", "en-IL", "en-LB", "en-JO", "en-CY",
 ]
+# -----------------------------------------------
 
 # 3. 【修改：下载历史图片的数量】
 # 将数量提高到 60，以获取大约过去两个月的去重图片
