@@ -20,7 +20,7 @@ MARKETS_TO_CHECK = [
     "en-ZA", "ar-XA",
 ]
 # 3. 要下载图片的数量（今天 + 历史）
-NUM_IMAGES_TO_FETCH = 8
+NUM_IMAGES_TO_FETCH = 60
 # 4. 图片分辨率 (例如: 1920x1080)
 RESOLUTION = "1920x1080"
 # 5. 目标文件夹 
