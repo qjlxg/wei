@@ -12,7 +12,7 @@ API_URL = "https://api.nasa.gov/planetary/apod"
 # 2. **批量下载配置：起始日期**
 # 脚本将从 START_DATE 一直到运行脚本的今天，逐日下载。
 # 格式必须是 YYYY-MM-DD
-START_DATE = "2025-10-30" 
+START_DATE = "1995-06-16" 
 
 # 3. 目标文件夹的根目录
 BASE_OUTPUT_DIR = "nasa_apod_wallpapers"
