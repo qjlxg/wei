@@ -8,8 +8,9 @@ from datetime import datetime
 # 1. API 基础 URL
 BASE_URL = "https://earthview.withgoogle.com"
 
-# 2. 起始 API 点（可从网站随机选一个替换）
-START_API = "/_api/lipie-lubaczow-county-poland-1893.json"  
+# 2. 修正后的起始 API 点 (替换为已知有效的 API，例如: Mount Fuji)
+# 您可以随时从网站随机选择一个替换，格式为: /_api/<slug>-<id>.json
+START_API = "/_api/mount-fuji-japan-4927.json"  
 
 # 3. 要下载图片的数量（0 表示所有）
 NUM_IMAGES_TO_FETCH = 8
@@ -65,7 +66,7 @@ def main():
     current = START_API
     ids = set()
     downloaded_count = 0
-    new_files_downloaded = False # 标记本次运行是否下载了新文件
+    new_files_downloaded = False
     
     print(f"Attempting to fetch up to {NUM_IMAGES_TO_FETCH if NUM_IMAGES_TO_FETCH > 0 else 'all'} images from Google Earth View.")
     
@@ -79,7 +80,7 @@ def main():
             print(f"Error fetching data from {url}: {e}")
             break
             
-        # 获取下载 URL
+        # ... (获取 download_url, image_id, title 逻辑保持不变)
         download_url = data.get("photoUrl")  
         if not download_url:
             download_url = data.get("downloadUrl")
@@ -91,7 +92,7 @@ def main():
         image_id = data.get("id", "unknown")
         title = data.get("slug", data.get("region", "untitled"))  
         
-        # 去重检查
+        # ... (去重检查逻辑保持不变)
         if image_id in ids:
             print("Loop detected. Exiting.")
             break
@@ -100,14 +101,14 @@ def main():
         # 下载
         if download_image(image_url, title, image_id):
             downloaded_count += 1
-            new_files_downloaded = True # 标记有新文件下载
+            new_files_downloaded = True
         
-        # 检查下载限制
+        # ... (检查下载限制逻辑保持不变)
         if NUM_IMAGES_TO_FETCH > 0 and downloaded_count >= NUM_IMAGES_TO_FETCH:
             print("Reached download limit. Exiting.")
             break
             
-        # 下一个 API
+        # ... (下一个 API 逻辑保持不变)
         next_api = data.get("nextApi")
         if not next_api:
             print("No more images. Exiting.")
@@ -116,11 +117,18 @@ def main():
     
     print(f"Script finished. Total images downloaded: {downloaded_count}")
     
-    # 将状态传递给 GitHub Actions
-    if not new_files_downloaded:
-        print(f"::set-output name=commit_needed::false")
+    # 🌟 **核心修复:** 使用 GitHub Actions 推荐的 Environment File 输出
+    output_key = "commit_needed"
+    output_value = "true" if new_files_downloaded else "false"
+    
+    # 检查 GITHUB_OUTPUT 变量是否存在（只在 GitHub Actions 环境中存在）
+    if os.environ.get("GITHUB_OUTPUT"):
+        # 将键值对写入 GITHUB_OUTPUT 文件
+        with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+            f.write(f"{output_key}={output_value}\n")
     else:
-        print(f"::set-output name=commit_needed::true")
+        # Fallback: 在本地运行或非 Actions 环境中，仍使用 print 输出状态
+        print(f"Output for Actions: {output_key}={output_value}") 
 
 if __name__ == "__main__":
     main()
