@@ -1,53 +1,75 @@
 import requests
-import json
 import os
 import re
+from datetime import datetime
+import random 
 
 # --- 配置 ---
-# 1. API 基础 URL
-BASE_URL = "https://earthview.withgoogle.com"
 
-# 2. 起始 API 点（从一个已知图像开始，可从网站随机选一个替换）
-START_API = "/_api/lipie-lubaczow-county-poland-1893.json"  # 示例起始点
+# 1. Gist URL 配置 (用于动态获取 ID 列表)
+GIST_URL = "https://gist.githubusercontent.com/jzc/2d353c7e0815f6059642c9445919e7de/raw/187f6beacd3abf0fad991c0b7e89c4a2635b15dd/urls.txt"
 
-# 3. 要下载图片的数量（0 表示所有）
-NUM_IMAGES_TO_FETCH = 8
+# 2. 图片托管基础 URL
+IMAGE_BASE_URL = "https://www.gstatic.com/prettyearth/assets/full/"
 
-# 4. 图片分辨率（Earth View 默认高清，无需指定）
+# 3. **修改点：** 将数量设置为 0，表示下载全部 ID
+NUM_IMAGES_TO_FETCH = 0 
 
-# 5. 目标文件夹
-OUTPUT_DIR = "google_earthview_wallpapers"
+# 4. 目标文件夹的根目录
+BASE_OUTPUT_DIR = "google_earthview_wallpapers"
 
 # ----------------
 
+def fetch_and_extract_ids(url):
+    """从 Gist URL 获取内容，并提取所有 ID"""
+    print(f"Fetching IDs from: {url}")
+    try:
+        response = requests.get(url, timeout=15)
+        response.raise_for_status() # 检查 4xx/5xx 错误
+        
+        # 使用正则表达式查找 /full/ 后跟数字，直到 .jpg
+        content = response.text
+        ids = re.findall(r'/full/(\d+)\.jpg', content) 
+        
+        # 返回去重后的 ID 列表
+        unique_ids = list(set(ids))
+        print(f"Successfully fetched {len(unique_ids)} unique IDs.")
+        return unique_ids
+        
+    except requests.RequestException as e:
+        print(f"Error fetching Gist content: {e}")
+        return []
+
 def sanitize_filename(filename):
-    """清理文件名中的非法字符"""
+    """清理文件名中的非法字符 (保留以防未来扩展)"""
     safe_name = re.sub(r'[\\/:*?"<>|]', ' ', filename)
     safe_name = re.sub(r'\s+', '_', safe_name).strip('_')
     return safe_name
 
-def download_image(image_url, title, id):
-    """下载图片并保存到目标目录"""
-    # 构造目录
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
-  
-    # 清理标题
-    safe_title = sanitize_filename(title) if title else f"earthview_{id}"
-  
-    # 文件名: ID_标题.jpg
-    filename = f"{id}_{safe_title}.jpg"
-    filepath = os.path.join(OUTPUT_DIR, filename)
-   
+def download_image(image_url, id):
+    """下载图片并保存到目标目录 (YYYY/MM 结构)"""
+    
+    # 动态构造目录: google_earthview_wallpapers/YYYY/MM
+    now = datetime.now()
+    current_output_dir = os.path.join(BASE_OUTPUT_DIR, str(now.year), f"{now.month:02d}")
+    
+    os.makedirs(current_output_dir, exist_ok=True)
+    
+    # 文件名: ID.jpg
+    filename = f"{id}.jpg"
+    filepath = os.path.join(current_output_dir, filename)
+    
     if os.path.exists(filepath):
+        # 即使下载全部，也会跳过已存在的文件，避免重复下载和浪费带宽
         print(f"File already exists: {filepath}. Skipping download.")
         return False
-      
-    print(f"Downloading {title} (ID: {id}) to {filepath}")
-  
+        
+    print(f"Downloading image (ID: {id}) to {filepath}")
+    
     try:
         img_response = requests.get(image_url, stream=True, timeout=15)
         img_response.raise_for_status()
-      
+        
         with open(filepath, 'wb') as f:
             for chunk in img_response.iter_content(chunk_size=8192):
                 f.write(chunk)
@@ -58,58 +80,54 @@ def download_image(image_url, title, id):
         return False
 
 def main():
-    """主函数 - 下载 Google Earth View 壁纸"""
-    current = START_API
-    ids = set()
+    """主函数 - 循环下载 Google Earth View 壁纸"""
+    
+    # 动态获取 ID 列表
+    all_image_ids = fetch_and_extract_ids(GIST_URL)
+    
+    if not all_image_ids:
+        print("Fatal: Could not fetch image IDs. Exiting.")
+        set_action_output(False)
+        return
+
     downloaded_count = 0
-   
-    print(f"Attempting to fetch up to {NUM_IMAGES_TO_FETCH if NUM_IMAGES_TO_FETCH > 0 else 'all'} images from Google Earth View.")
-   
-    while True:
-        url = BASE_URL + current
-        try:
-            response = requests.get(url, timeout=10)
-            response.raise_for_status()
-            data = json.loads(response.content)
-        except (requests.RequestException, json.JSONDecodeError) as e:
-            print(f"Error fetching data from {url}: {e}")
-            break
-      
-        # 获取下载 URL
-        download_url = data.get("photoUrl")  # 实际是 /download/ID.jpg，但网站使用 photoUrl 为高清图像
-        if not download_url:
-            download_url = data.get("downloadUrl")
-        if not download_url:
-            print(f"Skipping image due to missing download URL.")
-            continue
-      
-        image_url = BASE_URL + download_url
-        image_id = data.get("id", "unknown")
-        title = data.get("slug", data.get("region", "untitled"))  # 使用 slug 或 region 作为标题
-      
-        # 去重检查
-        if image_id in ids:
-            print("Loop detected. Exiting.")
-            break
-        ids.add(image_id)
-      
+    new_files_downloaded = False
+    
+    # 随机化 ID 列表，以防多次运行后网络中断，可以继续从不同的 ID 开始
+    random.shuffle(all_image_ids)
+    
+    # **核心逻辑：** 如果 NUM_IMAGES_TO_FETCH > 0，则裁剪列表。
+    # 由于我们设置 NUM_IMAGES_TO_FETCH = 0，所以 ids_to_fetch 将是完整的列表。
+    ids_to_fetch = all_image_ids
+    if NUM_IMAGES_TO_FETCH > 0:
+        ids_to_fetch = all_image_ids[:NUM_IMAGES_TO_FETCH]
+    
+    print(f"Attempting to fetch {len(ids_to_fetch)} images from Gstatic server.")
+    
+    for image_id in ids_to_fetch:
+        # 构造下载 URL
+        image_url = f"{IMAGE_BASE_URL}{image_id}.jpg"
+        
         # 下载
-        if download_image(image_url, title, image_id):
+        if download_image(image_url, image_id):
             downloaded_count += 1
-      
-        # 检查下载限制
-        if NUM_IMAGES_TO_FETCH > 0 and downloaded_count >= NUM_IMAGES_TO_FETCH:
-            print("Reached download limit. Exiting.")
-            break
-      
-        # 下一个 API
-        next_api = data.get("nextApi")
-        if not next_api:
-            print("No more images. Exiting.")
-            break
-        current = next_api
-   
+            new_files_downloaded = True
+            
     print(f"Script finished. Total images downloaded: {downloaded_count}")
+    
+    # 将最终状态传递给 GitHub Actions
+    set_action_output(new_files_downloaded)
+
+def set_action_output(new_files_downloaded):
+    """使用 Environment File 输出状态给 GitHub Actions"""
+    output_key = "commit_needed"
+    output_value = "true" if new_files_downloaded else "false"
+    
+    if os.environ.get("GITHUB_OUTPUT"):
+        with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+            f.write(f"{output_key}={output_value}\n")
+    else:
+        print(f"Output for Actions: {output_key}={output_value}") 
 
 if __name__ == "__main__":
     main()

@@ -1,0 +1,62 @@
+name: Download NASA APOD Daily Image
+
+on:
+  workflow_dispatch:  # 支持手动运行
+  
+  # 每天运行一次（例如，UTC 时间 03:00，避免在您运行 Google 脚本的同时运行）
+  schedule:
+    - cron: '0 3 * * *' 
+    
+  push:
+    branches:
+      - main
+    paths:
+      - 'nasa_apod.py'
+      - '.github/workflows/download_nasa_apod.yml'
+
+env:
+  TZ: Asia/Shanghai  # 设置时区
+
+jobs:
+  download-and-push:
+    runs-on: ubuntu-latest
+    
+    outputs:
+      commit_needed: ${{ steps.run-script.outputs.commit_needed }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
+
+      - name: Run NASA APOD download script
+        id: run-script # 标记此步骤以捕获脚本输出
+        # 传递 NASA_API_KEY Secret 作为环境变量
+        env:
+          NASA_API_KEY: ${{ secrets.NASA_API_KEY }} 
+        run: python nasa_apod.py 
+
+      - name: Commit and push downloaded images
+        # 仅当 Python 脚本输出 'commit_needed: true' 时执行此步骤
+        if: steps.run-script.outputs.commit_needed == 'true'
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+          
+          # 仅添加根目录
+          git add nasa_apod_wallpapers/ 
+          
+          git commit -m "Add downloaded NASA APOD - $(date +'%Y-%m-%d')"
+          git push
+        env:
+          # 使用内置 token 进行认证和推送
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
