@@ -2,73 +2,122 @@ import requests
 import datetime
 import os
 import re
+
 # --- 配置 ---
-# 1. 稳定数据源 (用于获取可靠的 hdate/utctime)
-BING_API_URL_DATA = "https://www.bing.com/HPImageArchive.aspx?format=js&idx={}&n={}&mkt=en-US"
-# 2. 中文标题源 (用于获取中文标题)
-BING_API_URL_TITLE = "https://www.bing.com/HPImageArchive.aspx?format=js&idx={}&n={}&mkt=zh-CN"
-# 要下载图片的数量（今天 + 历史）
+# 1. API 基础 URL
+BING_API_URL_BASE = "https://www.bing.com/HPImageArchive.aspx?format=js&idx={}&n={}&mkt={}"
+
+MARKETS_TO_CHECK = [
+    # 亚洲及太平洋地区 (Asia/Pacific)
+    "zh-CN",  # 中国大陆 (China)
+    "zh-HK",  # 香港 (Hong Kong)
+    "zh-TW",  # 台湾 (Taiwan)
+    "ja-JP",  # 日本 (Japan)
+    "ko-KR",  # 韩国 (South Korea)
+    "en-IN",  # 印度 (India)
+    "en-AU",  # 澳大利亚 (Australia)
+    "en-NZ",  # 新西兰 (New Zealand)
+    "en-MY",  # 马来西亚 (Malaysia)
+    "en-PH",  # 菲律宾 (Philippines)
+    "en-SG",  # 新加坡 (Singapore)
+    
+    # 欧洲地区 (Europe)
+    "en-GB",  # 英国 (United Kingdom)
+    "de-DE",  # 德国 (Germany)
+    "fr-FR",  # 法国 (France)
+    "es-ES",  # 西班牙 (Spain)
+    "it-IT",  # 意大利 (Italy)
+    "nl-NL",  # 荷兰 (Netherlands)
+    "sv-SE",  # 瑞典 (Sweden)
+    "ru-RU",  # 俄罗斯 (Russia)
+    "tr-TR",  # 土耳其 (Turkey)
+    "pt-PT",  # 葡萄牙 (Portugal)
+
+    # 美洲地区 (The Americas)
+    "en-US",  # 美国 (United States) - 常用基准
+    "en-CA",  # 加拿大 (Canada)
+    "es-MX",  # 墨西哥 (Mexico)
+    "pt-BR",  # 巴西 (Brazil)
+    
+    # 中东及非洲地区 (Middle East/Africa)
+    "en-ZA",  # 南非 (South Africa)
+    "ar-XA",  # 阿拉伯语地区 (General Arabic)
+]
+
+# 3. 要下载图片的数量（今天 + 历史）
 NUM_IMAGES_TO_FETCH = 8
-# 图片分辨率 (例如: 1920x1080)
+
+# 4. 图片分辨率 (例如: 1920x1080)
 RESOLUTION = "1920x1080"
-# 目标文件夹
-OUTPUT_DIR = "bing_images"
-# 上海时区
+# 5. 目标文件夹
+OUTPUT_DIR = "bing_images_multi_market"
+# 6. 上海时区 (用于文件命名时间戳)
 SHANGHAI_TZ = datetime.timezone(datetime.timedelta(hours=8))
 # ----------------
-def get_bing_data(api_url, index, count):
+
+def get_bing_data(market, index, count):
     """从指定的 Bing API URL 获取图片数据"""
-    url = api_url.format(index, count)
+    url = BING_API_URL_BASE.format(index, count, market)
     try:
         response = requests.get(url, timeout=10)
         response.raise_for_status()
-        return response.json().get('images', [])
+        # 增加市场信息到每个图片数据中，用于追踪来源
+        images_data = response.json().get('images', [])
+        for img in images_data:
+            img['market_source'] = market
+        return images_data
     except requests.RequestException as e:
         print(f"Error fetching data from {url}: {e}")
         return []
-def get_chinese_titles(images_data_en):
-    """获取中文市场（zh-CN）的图片标题，用于匹配英文数据"""
-    print("Fetching Chinese titles from zh-CN market...")
-    images_data_zh = get_bing_data(BING_API_URL_TITLE, index=0, count=NUM_IMAGES_TO_FETCH)
+
+def get_chinese_titles(image_urlbases):
+    """
+    专门从 zh-CN 市场获取中文标题，只查询需要标题的图片。
+    参数 image_urlbases 是一个包含所有不重复 urlbase 的集合。
+    """
+    print("Fetching Chinese titles from zh-CN market for matching...")
+    # 假设需要获取的图片数量最多不会超过 50 张（8天 * 5市场），但我们只查目标 urlbase
+    # 这里为了简单，我们还是获取 NUM_IMAGES_TO_FETCH 的数据
+    images_data_zh = get_bing_data("zh-CN", index=0, count=NUM_IMAGES_TO_FETCH)
    
     zh_titles = {}
     for img_zh in images_data_zh:
-        # 使用 urlbase 作为唯一键来匹配不同市场的图片
         urlbase = img_zh.get('urlbase')
         title = img_zh.get('copyright')
-        if urlbase and title:
+        if urlbase in image_urlbases and title:
             zh_titles[urlbase] = title
            
     return zh_titles
+
 def sanitize_filename(filename):
     """清理文件名中的非法字符，保留原始标题主体"""
-    # 移除文件路径中的非法字符（例如 \ / : * ? " < > |）
     safe_name = re.sub(r'[\\/:*?"<>|]', ' ', filename)
-    # 将多个空格替换为一个下划线
     safe_name = re.sub(r'\s+', '_', safe_name).strip('_')
     return safe_name
-def download_image(base_url, start_date, title):
+
+def download_image(base_url, start_date, title, market_source):
     """下载图片并保存到目标目录"""
     image_url = f"https://www.bing.com{base_url}_{RESOLUTION}.jpg"
    
-    # 构造目录: bing_images/年/月
+    # 构造目录: bing_images_multi_market/年/月
     year = start_date.strftime('%Y')
     month = start_date.strftime('%m')
     target_dir = os.path.join(OUTPUT_DIR, year, month)
     os.makedirs(target_dir, exist_ok=True)
    
-    # 清理标题
+    # 清理标题，并在文件名末尾加入市场标识，以防万一标题重复
     safe_title = sanitize_filename(title)
    
-    # 文件名: 年月日_时分秒_清理后的原始标题.jpg
+    # 文件名: 年月日_时分秒_清理后的原始标题_市场.jpg
     timestamp = start_date.strftime('%Y%m%d_%H%M%S')
-    filename = f"{timestamp}_{safe_title}.jpg"
+    filename = f"{timestamp}_{safe_title}_{market_source}.jpg"
     filepath = os.path.join(target_dir, filename)
+    
     if os.path.exists(filepath):
         print(f"File already exists: {filepath}. Skipping download.")
         return False
        
-    print(f"Downloading {title} to {filepath}")
+    print(f"Downloading {title} (Source: {market_source}) to {filepath}")
    
     try:
         img_response = requests.get(image_url, stream=True, timeout=15)
@@ -82,31 +131,57 @@ def download_image(base_url, start_date, title):
     except requests.RequestException as e:
         print(f"Error downloading image {image_url}: {e}")
         return False
+
 def main():
-    """主函数"""
+    """主函数 - 聚合多市场数据并去重下载"""
    
-    print(f"Attempting to fetch {NUM_IMAGES_TO_FETCH} images using the stable en-US market...")
-    images_en = get_bing_data(BING_API_URL_DATA, index=0, count=NUM_IMAGES_TO_FETCH)
+    # 用于存储所有不重复图片的元数据
+    unique_images_map = {}
+    
+    print(f"Attempting to fetch {NUM_IMAGES_TO_FETCH} images from {len(MARKETS_TO_CHECK)} markets.")
+
+    # 1. 遍历所有市场，收集数据并去重
+    for market in MARKETS_TO_CHECK:
+        print(f"-> Fetching data from market: {market}...")
+        images_data = get_bing_data(market, index=0, count=NUM_IMAGES_TO_FETCH)
+        
+        for img_data in images_data:
+            urlbase = img_data.get('urlbase')
+            # 使用 urlbase 进行去重
+            if urlbase and urlbase not in unique_images_map:
+                # 优先使用拥有 utctime 的数据源作为稳定数据源
+                if img_data.get('fullstartdate'):
+                    unique_images_map[urlbase] = img_data
+                # 如果没有 fullstartdate，但 unique_images_map 中也没有，则先记录
+                elif urlbase not in unique_images_map:
+                    unique_images_map[urlbase] = img_data
+                # 否则，如果 unique_images_map 中已有一个数据（哪怕没有 utctime），则保留已有的
    
-    if not images_en:
-        print("Failed to fetch any image data from the stable market. Exiting.")
+    if not unique_images_map:
+        print("Failed to fetch any unique image data. Exiting.")
         return
+
+    # 2. 准备下载列表和获取中文标题
+    images_to_download = list(unique_images_map.values())
+    all_urlbases = set(unique_images_map.keys())
+    
     # 获取中文标题映射
-    zh_titles_map = get_chinese_titles(images_en)
-   
+    zh_titles_map = get_chinese_titles(all_urlbases)
+    
+    print(f"Found a total of {len(images_to_download)} unique images to process.")
+    
     downloaded_count = 0
    
-    for img_data in images_en:
-        hdate_str = img_data.get('startdate') # YYYYMMDD
-        utctime_str = img_data.get('fullstartdate') # YYYYMMDDHHMM (可能缺失)
+    # 3. 遍历下载
+    for img_data in images_to_download:
+        hdate_str = img_data.get('startdate')
+        utctime_str = img_data.get('fullstartdate')
         urlbase = img_data.get('urlbase')
+        market_source = img_data.get('market_source', 'unknown') # 记录来源市场
        
-        if not hdate_str or not urlbase:
-            print(f"Skipping image due to missing critical data (hdate/urlbase).")
-            continue
-           
-        # 优先使用中文标题，否则使用英文标题
-        final_title = zh_titles_map.get(urlbase, img_data.get('copyright', 'bing_wallpaper_en'))
+        # 优先使用中文标题，否则使用数据源市场返回的标题
+        final_title = zh_titles_map.get(urlbase, img_data.get('copyright', f'bing_wallpaper_{market_source}'))
+        
         try:
             shanghai_datetime = None
            
@@ -114,19 +189,23 @@ def main():
                 # 方案 A: 使用 utctime
                 utc_datetime = datetime.datetime.strptime(utctime_str, '%Y%m%d%H%M').replace(tzinfo=datetime.timezone.utc)
                 shanghai_datetime = utc_datetime.astimezone(SHANGHAI_TZ)
-            else:
+            elif hdate_str:
                 # 方案 B: utctime 缺失，使用 hdate 和上海午夜时间 (00:00:00)
-                print(f"Warning: utctime missing for {final_title}. Using hdate with 00:00:00 Shanghai time.")
+                print(f"Warning: utctime missing for {final_title} (Source: {market_source}). Using hdate with 00:00:00 Shanghai time.")
                 shanghai_date = datetime.datetime.strptime(hdate_str, '%Y%m%d')
                 shanghai_datetime = SHANGHAI_TZ.localize(shanghai_date)
-           
+            else:
+                 print(f"Skipping image {urlbase} due to missing date data.")
+                 continue
+
             # 下载图片
-            if download_image(urlbase, shanghai_datetime, final_title):
+            if download_image(urlbase, shanghai_datetime, final_title, market_source):
                 downloaded_count += 1
                
         except ValueError as e:
             print(f"Error parsing date/time for image {final_title}: {e}")
        
-    print(f"Script finished. Total new images downloaded: {downloaded_count}")
+    print(f"Script finished. Total unique images processed: {len(images_to_download)}. New images downloaded: {downloaded_count}")
+
 if __name__ == "__main__":
     main()
