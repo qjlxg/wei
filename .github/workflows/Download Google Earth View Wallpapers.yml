@@ -2,19 +2,27 @@ name: Download Google Earth View Wallpapers
 
 on:
   workflow_dispatch:  # 支持手动运行
+  
+  # 每天 UTC 时间 02:00 运行（您可根据需要调整）
+  schedule:
+    - cron: '0 2 * * *' 
+    
   push:
     branches:
-      - main  # 或你的默认分支
+      - main  # 或您的默认分支
     paths:
-      - 'google_wallpaper.py'  # 假设脚本文件名为 google_wallpaper.py，当脚本变动时触发
-      - '.github/workflows/download_wallpapers.yml'  # 当此 YAML 文件变动时触发
+      - 'google_wallpaper.py'
+      - '.github/workflows/download_wallpapers.yml'
 
 env:
-  TZ: Asia/Shanghai  # 设置上海时区
+  TZ: Asia/Shanghai  # 设置时区
 
 jobs:
   download-and-push:
     runs-on: ubuntu-latest
+    # 将脚本输出暴露为 job 输出
+    outputs:
+      commit_needed: ${{ steps.run-script.outputs.commit_needed }}
 
     steps:
       - name: Checkout repository
@@ -31,14 +39,21 @@ jobs:
           pip install requests
 
       - name: Run wallpaper download script
-        run: python google_wallpaper.py  # 运行你的 Google 壁纸下载脚本，假设文件名为 google_wallpaper.py
+        id: run-script # 标记此步骤以捕获其输出
+        run: python google_wallpaper.py 
 
       - name: Commit and push downloaded images
+        # 仅当 Python 脚本输出 'commit_needed: true' 时执行此步骤
+        if: steps.run-script.outputs.commit_needed == 'true'
         run: |
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
-          git add google_earthview_wallpapers/  # 添加输出目录中的文件（年/月目录将在脚本中处理）
-          git commit -m "Add downloaded Google Earth View wallpapers with timestamp - $(date +'%Y-%m-%d %H:%M:%S')" || echo "No changes to commit"
+          
+          # 仅添加根目录，子目录 (YYYY/MM) 将被一并添加
+          git add google_earthview_wallpapers/ 
+          
+          git commit -m "Add downloaded Google Earth View wallpapers - $(date +'%Y-%m-%d %H:%M:%S')"
           git push
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # 使用内置 token 推送
+          # 使用内置 token 进行认证和推送
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
