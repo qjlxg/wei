@@ -2,10 +2,17 @@ name: Download NASA APOD Daily Image
 
 on:
   workflow_dispatch:  # 支持手动运行
+    # 允许输入一个参数来触发“批量下载”模式
+    inputs:
+      batch_download:
+        description: '是否运行历史批处理下载 (用于首次运行)'
+        required: false
+        default: 'false'
+        type: boolean
   
-  # 每天运行一次（例如，UTC 时间 03:00，避免在您运行 Google 脚本的同时运行）
+  # 每天运行一次（例如，UTC 时间 03:00）
   schedule:
-    - cron: '0 3 * * *' 
+    - cron: '0 3 * * *'
     
   push:
     branches:
@@ -20,6 +27,8 @@ env:
 jobs:
   download-and-push:
     runs-on: ubuntu-latest
+    # 【新增】设置作业超时时间，以适应长时间的历史批量下载
+    timeout-minutes: 60 
     
     outputs:
       commit_needed: ${{ steps.run-script.outputs.commit_needed }}
@@ -42,8 +51,8 @@ jobs:
         id: run-script # 标记此步骤以捕获脚本输出
         # 传递 NASA_API_KEY Secret 作为环境变量
         env:
-          NASA_API_KEY: ${{ secrets.NASA_API_KEY }} 
-        run: python nasa_apod.py 
+          NASA_API_KEY: ${{ secrets.NASA_API_KEY }}
+        run: python nasa_apod.py
 
       - name: Commit and push downloaded images
         # 仅当 Python 脚本输出 'commit_needed: true' 时执行此步骤
@@ -52,10 +61,21 @@ jobs:
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
           
-          # 仅添加根目录
-          git add nasa_apod_wallpapers/ 
+          # 【优化】使用 git status 判断是否有大量文件变动
+          # 如果新增的文件超过 10 个，则假定为批量下载
+          NEW_FILES=$(git status --porcelain | grep 'nasa_apod_wallpapers/' | wc -l)
           
-          git commit -m "Add downloaded NASA APOD - $(date +'%Y-%m-%d')"
+          if [ "$NEW_FILES" -gt "10" ]; then
+            COMMIT_MESSAGE="🚀 Initial/Batch download of NASA APOD (+$NEW_FILES files)"
+          else
+            COMMIT_MESSAGE="✨ Add daily NASA APOD - $(date +'%Y-%m-%d')"
+          fi
+
+          # 确保所有新增的文件和目录都被追踪
+          git add nasa_apod_wallpapers/
+          
+          # 提交并推送
+          git commit -m "$COMMIT_MESSAGE"
           git push
         env:
           # 使用内置 token 进行认证和推送
