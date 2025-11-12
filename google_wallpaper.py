@@ -8,11 +8,11 @@ from datetime import datetime
 # 1. API 基础 URL
 BASE_URL = "https://earthview.withgoogle.com"
 
-# 2. 初始硬编码 API 点 (根据用户确认，使用 1893 链接)
+# 2. 初始硬编码 API 点 (已失效，但保留以便尝试)
 START_API = "/_api/lipie-lubaczow-county-poland-1893.json" 
 
-# 3. 随机 API 终点（用于动态发现，如果硬编码起点失效）
-RANDOM_API = "/random.json" 
+# 3. **新的 Fallback URL**：主页，用于解析重定向后的最新图片链接
+HOME_URL = "/" 
 
 # 4. 要下载图片的数量（0 表示所有）
 NUM_IMAGES_TO_FETCH = 8
@@ -22,50 +22,13 @@ BASE_OUTPUT_DIR = "google_earthview_wallpapers"
 
 # ----------------
 
+# (sanitize_filename 和 download_image 函数保持不变)
+
 def sanitize_filename(filename):
     """清理文件名中的非法字符"""
     safe_name = re.sub(r'[\\/:*?"<>|]', ' ', filename)
     safe_name = re.sub(r'\s+', '_', safe_name).strip('_')
     return safe_name
-
-def get_valid_start_api(initial_api):
-    """
-    尝试验证初始 API 是否有效。如果失效，则尝试从 /random.json 获取一个新的 API 路径。
-    返回: 有效的 API 路径字符串 或 None
-    """
-    api_to_check = initial_api
-    
-    # 第一次尝试：检查硬编码的 API
-    try:
-        response = requests.head(BASE_URL + api_to_check, timeout=5)
-        if response.status_code == 200:
-            print(f"Found valid starting API: {api_to_check}")
-            return api_to_check
-        else:
-            print(f"Initial API {api_to_check} returned status {response.status_code}. Attempting fallback...")
-    except requests.RequestException:
-        print(f"Initial API {api_to_check} failed to connect. Attempting fallback...")
-        pass  # 忽略错误，继续尝试随机 API
-
-    # 第二次尝试：从 /random.json 获取一个新的 API
-    try:
-        random_url = BASE_URL + RANDOM_API
-        response = requests.get(random_url, timeout=10)
-        response.raise_for_status()
-        data = json.loads(response.content)
-        
-        # 网站的 /random.json 返回的 JSON 结构通常包含 nextApi 或 selfApi
-        new_api = data.get("nextApi") or data.get("selfApi")
-        
-        if new_api and new_api.startswith("/_api/"):
-            print(f"Successfully retrieved new starting API via fallback: {new_api}")
-            return new_api
-            
-    except (requests.RequestException, json.JSONDecodeError, AttributeError) as e:
-        print(f"Error getting random API: {e}")
-        return None
-        
-    return None
 
 def download_image(image_url, title, id):
     """下载图片并保存到目标目录 (YYYY/MM 结构)"""
@@ -101,15 +64,63 @@ def download_image(image_url, title, id):
     except requests.RequestException as e:
         print(f"Error downloading image {image_url}: {e}")
         return False
+        
+def get_valid_start_api(initial_api):
+    """
+    尝试验证初始 API。如果失效，则通过访问主页解析重定向链接作为 Fallback。
+    返回: 有效的 API 路径字符串 或 None
+    """
+    api_to_check = initial_api
+    
+    # 第一次尝试：检查硬编码的 API
+    try:
+        response = requests.head(BASE_URL + api_to_check, timeout=5)
+        if response.status_code == 200:
+            print(f"Found valid starting API: {api_to_check}")
+            return api_to_check
+    except requests.RequestException:
+        pass  # 忽略错误，继续尝试 Fallback
+
+    print(f"Initial API {initial_api} failed. Attempting fallback via homepage redirection...")
+
+    # **核心改进点：第二次尝试，通过访问主页获取最新链接**
+    try:
+        # 禁用重定向，requests.get(allow_redirects=False)
+        # 然后检查重定向头 Location
+        response = requests.get(BASE_URL + HOME_URL, allow_redirects=False, timeout=10)
+        
+        # 检查是否发生重定向 (302/301)
+        if response.status_code in [301, 302] and 'Location' in response.headers:
+            # 重定向目标是 /<slug>-<id> 格式
+            redirect_path = response.headers['Location']
+            
+            # 将路径转换为 API 格式 /_api/<slug>-<id>.json
+            if redirect_path.startswith('/'):
+                # 移除路径前的 /
+                slug_id = redirect_path.strip('/')
+                new_api = f"/_api/{slug_id}.json"
+                
+                print(f"Successfully retrieved new starting API via redirection: {new_api}")
+                # 再次快速检查这个新的 API 是否有效 (可选，但更安全)
+                test_response = requests.head(BASE_URL + new_api, timeout=5)
+                if test_response.status_code == 200:
+                    return new_api
+                else:
+                    print(f"Error: Fallback API {new_api} failed validation (Status {test_response.status_code}).")
+                    
+    except requests.RequestException as e:
+        print(f"Error during homepage redirection fallback: {e}")
+        return None
+        
+    return None
 
 def main():
     """主函数 - 下载 Google Earth View 壁纸"""
     
-    # **核心改进点: 获取一个有效的起始 API**
+    # **获取一个有效的起始 API**
     start_api_path = get_valid_start_api(START_API)
     if not start_api_path:
         print("Fatal: Could not find a valid starting API point. Exiting.")
-        # 即使失败，也需要输出状态给 Actions
         set_action_output(False)
         return
         
@@ -167,20 +178,17 @@ def main():
     
     print(f"Script finished. Total images downloaded: {downloaded_count}")
     
-    # 将最终状态传递给 GitHub Actions
     set_action_output(new_files_downloaded)
 
 def set_action_output(new_files_downloaded):
-    """使用 Environment File 输出状态给 GitHub Actions (修复弃用警告)"""
+    """使用 Environment File 输出状态给 GitHub Actions"""
     output_key = "commit_needed"
     output_value = "true" if new_files_downloaded else "false"
     
-    # 检查 GITHUB_OUTPUT 环境变量是否存在
     if os.environ.get("GITHUB_OUTPUT"):
         with open(os.environ["GITHUB_OUTPUT"], "a") as f:
             f.write(f"{output_key}={output_value}\n")
     else:
-        # 本地测试 Fallback
         print(f"Output for Actions: {output_key}={output_value}") 
 
 if __name__ == "__main__":
