@@ -67,6 +67,7 @@ def get_bing_data(market, index, count):
 def get_chinese_titles(image_urlbases):
     """专门从 zh-CN 市场获取中文标题，作为文件名附加标识"""
     print("\nFetching Chinese titles from zh-CN market for matching...")
+    # 注意：get_bing_data 已经会打印 DEBUG 信息
     images_data_zh = get_bing_data("zh-CN", index=0, count=NUM_IMAGES_TO_FETCH)
     
     zh_titles = {}
@@ -86,7 +87,7 @@ def sanitize_filename(filename):
     # 截断过长的标题，避免文件名过长
     return safe_name[:80]
 
-# 【使用 URLBase 提取 ID 实现严格去重】
+# 【使用 OHR 唯一 ID 提取实现严格去重】
 def download_image_unified(base_url, start_date, title):
     """下载图片并保存到目标目录，使用统一文件名实现严格去重"""
     # 构建图片下载 URL - 使用原始 URLBase
@@ -99,15 +100,19 @@ def download_image_unified(base_url, start_date, title):
     os.makedirs(target_dir, exist_ok=True)
     
     # === 关键去重 ID 提取 (基于 OHR 标识) ===
-    # 尝试匹配 OHR.之后到第一个下划线之间的核心 ID
-    match = re.search(r'OHR\.(.+?)_', base_url)
-    
+    # 步骤 1: 清理 base_url，只保留文件名部分
+    cleaned_url = base_url.split('/')[-1]
+
+    # 步骤 2: 尝试从 OHR. 之后提取 ID，直到遇到第一个下划线 _ 为止
+    # (例如从 OHR.ColosseumRome_DE-DE9770926344 提取 ColosseumRome)
+    match = re.search(r'OHR\.([A-Za-z0-9]+)_', cleaned_url)
+
     if match:
-        # 提取 'ColosseumRome' 这部分作为主ID
-        unique_image_id = match.group(1).split('_')[0]
+        # 成功提取了核心名称
+        unique_image_id = match.group(1)
     else:
-        # 如果没有 OHR 标识，使用 URLBase 的最后一部分作为回退 ID
-        unique_image_id = base_url.split('/')[-1]
+        # 回退：如果格式异常，使用清理后的 URL 作为 ID
+        unique_image_id = cleaned_url
         
     # 清理后的附加标题 (作为可读性标识，可选)
     safe_title = sanitize_filename(title)
@@ -154,6 +159,7 @@ def main():
         
         for img_data in images_data:
             urlbase = img_data.get('urlbase')
+            # 默认为一个很大的字符串，以确保第一个记录被选中
             current_fullstartdate = img_data.get('fullstartdate', '999999999999')
             
             if urlbase:
@@ -205,7 +211,8 @@ def main():
             elif hdate_str:
                 # 方案 B: utctime 缺失，使用 hdate 和上海午夜时间 (00:00:00)
                 shanghai_date = datetime.datetime.strptime(hdate_str, '%Y%m%d')
-                shanghai_datetime = SHANGHAI_TZ.localize(shanghai_date)
+                # 直接添加上海时区信息（注意：这里假设 hdate 指的是上海当地时间）
+                shanghai_datetime = datetime.datetime(shanghai_date.year, shanghai_date.month, shanghai_date.day, 0, 0, 0, tzinfo=SHANGHAI_TZ)
             else:
                 continue
             
