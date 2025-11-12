@@ -29,7 +29,6 @@ OUTPUT_DIR = "bing_images_global_unique"
 SHANGHAI_TZ = datetime.timezone(datetime.timedelta(hours=8))
 # ----------------
 
-# 【修改点 1: 增加详细错误打印】
 def get_bing_data(market, index, count):
     """从指定的 Bing API URL 获取图片数据，并在失败时打印详细调试信息"""
     url = BING_API_URL_BASE.format(index, count, market)
@@ -80,17 +79,17 @@ def get_chinese_titles(image_urlbases):
     return zh_titles
 
 def sanitize_filename(filename):
-    """清理文件名中的非法字符并截断，保留原始标题主体"""
-    # 替换非法字符为下划线，并将多个空格/下划线合并为一个下划线
+    """清理文件名中的非法字符，并替换所有非字母数字符号（包括URL查询符）"""
+    # 替换非法字符和所有非字母数字、空格、下划线、点号的字符
     safe_name = re.sub(r'[\\/:*?"<>|]', ' ', filename)
     safe_name = re.sub(r'\s+', '_', safe_name).strip('_')
     # 截断过长的标题，避免文件名过长
     return safe_name[:80]
 
-# 【修改点 2: 强制使用 URLBase 作为文件名核心标识】
+# 【使用 URLBase 提取 ID 实现严格去重】
 def download_image_unified(base_url, start_date, title):
     """下载图片并保存到目标目录，使用统一文件名实现严格去重"""
-    # 构建图片下载 URL
+    # 构建图片下载 URL - 使用原始 URLBase
     image_url = f"https://www.bing.com{base_url}_{RESOLUTION}.jpg"
     
     # 构造目录: bing_images_global_unique/年/月
@@ -99,17 +98,25 @@ def download_image_unified(base_url, start_date, title):
     target_dir = os.path.join(OUTPUT_DIR, year, month)
     os.makedirs(target_dir, exist_ok=True)
     
-    # 从 urlbase 中提取图片ID部分 (例如：/az/hprichbg/rb/Colosseum_ROW2815617303)
-    # 我们只需要最后一部分作为唯一ID：Colosseum_ROW2815617303
-    urlbase_segment = base_url.split('/')[-1]
-
-    # 清理后的附加标题 (作为可读性标识，截断避免文件名过长)
+    # === 关键去重 ID 提取 (基于 OHR 标识) ===
+    # 尝试匹配 OHR.之后到第一个下划线之间的核心 ID
+    match = re.search(r'OHR\.(.+?)_', base_url)
+    
+    if match:
+        # 提取 'ColosseumRome' 这部分作为主ID
+        unique_image_id = match.group(1).split('_')[0]
+    else:
+        # 如果没有 OHR 标识，使用 URLBase 的最后一部分作为回退 ID
+        unique_image_id = base_url.split('/')[-1]
+        
+    # 清理后的附加标题 (作为可读性标识，可选)
     safe_title = sanitize_filename(title)
     
-    # 文件名：【最早时间戳】_【URLBase唯一ID】_【清理后的标题】.jpg
-    # 严格去重只依赖前两部分，第三部分仅为方便查看
+    # 文件名：【最早时间戳】_【图片唯一ID】_【清理后的标题】.jpg
     timestamp = start_date.strftime('%Y%m%d_%H%M%S')
-    filename = f"{timestamp}_{urlbase_segment}_{safe_title}.jpg"
+    
+    # 使用唯一图片 ID 确保去重
+    filename = f"{timestamp}_{unique_image_id}_{safe_title}.jpg"
     filepath = os.path.join(target_dir, filename)
     
     # 核心去重检查：只要文件名相同，就跳过
@@ -124,7 +131,6 @@ def download_image_unified(base_url, start_date, title):
         img_response.raise_for_status()
         
         with open(filepath, 'wb') as f:
-            # 分块写入以处理大文件
             for chunk in img_response.iter_content(chunk_size=8192):
                 f.write(chunk)
         print(f"Successfully saved: {filepath}")
@@ -162,7 +168,6 @@ def main():
                     if current_fullstartdate < existing_fullstartdate:
                         # 更新元数据，以使用包含最早 fullstartdate 的那个记录
                         unique_images_map[urlbase] = img_data
-                        # print(f"    - Updated date for {urlbase} with earlier date: {current_fullstartdate} from {market}")
     
     # 增加 DEBUG 信息，查看是否获取到了数据
     if not unique_images_map:
