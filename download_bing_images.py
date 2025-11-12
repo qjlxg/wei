@@ -6,21 +6,34 @@ import re
 # --- 配置 ---
 # 1. API 基础 URL
 BING_API_URL_BASE = "https://www.bing.com/HPImageArchive.aspx?format=js&idx={}&n={}&mkt={}"
+
+# 2. 【扩展后的全球市场列表 - V5.1】
+# 包含更多欧洲、亚洲、中东、非洲和美洲的市场
 MARKETS_TO_CHECK = [
-    # 亚洲及太平洋地区 (Asia/Pacific)
+    # 亚洲及太平洋地区 (Asia/Pacific) - (30+ 个)
     "zh-CN", "zh-HK", "zh-TW", "ja-JP", "ko-KR", "en-IN", "en-AU", "en-NZ", "en-MY", 
-    "en-PH", "en-SG", "en-ID", 
-    # 欧洲地区 (Europe)
+    "en-PH", "en-SG", "en-ID", "en-TH", "th-TH", "ms-MY", "vi-VN", "bn-IN", "hi-IN",
+    "en-PK", "en-BD", "en-LK", "en-AE", "en-BH", "en-KW", "en-OM", "en-QA", 
+    "en-SA", "en-IL", "en-LB", "en-JO", "en-CY",
+    
+    # 欧洲地区 (Europe) - (约 20 个)
     "en-GB", "de-DE", "fr-FR", "es-ES", "it-IT", "nl-NL", "sv-SE", "ru-RU", "tr-TR", 
     "pt-PT", "da-DK", "de-AT", "de-CH", "fi-FI", "fr-BE", "fr-CH", "nl-BE", "no-NO", 
-    "pl-PL", 
-    # 美洲地区 (The Americas)
+    "pl-PL", "el-GR", "hu-HU", "cs-CZ", "sk-SK", "ro-RO", "bg-BG", "uk-UA",
+    
+    # 美洲地区 (The Americas) - (约 15 个)
     "en-US", "en-CA", "es-MX", "pt-BR", "es-AR", "es-CL", "es-US", "fr-CA", 
-    # 中东及非洲地区 (Middle East/Africa)
-    "en-ZA", "ar-XA",
+    "es-CO", "es-PE", "es-VE", "es-PR", "es-EC", "es-UY", "es-DO",
+    
+    # 中东及非洲地区 (Middle East/Africa) - (约 10 个)
+    "en-ZA", "ar-XA", "ar-SA", "ar-EG", "fr-MA", "fr-DZ", "fr-TN", "en-EG", "en-NG", 
+    "en-KE", 
 ]
-# 3. 要下载图片的数量（今天 + 历史）
-NUM_IMAGES_TO_FETCH = 60
+
+# 3. 【修改：下载历史图片的数量】
+# 将数量提高到 60，以获取大约过去两个月的去重图片
+NUM_IMAGES_TO_FETCH = 60 
+
 # 4. 图片分辨率 (例如: 1920x1080)
 RESOLUTION = "1920x1080"
 # 5. 目标文件夹 
@@ -64,20 +77,16 @@ def get_bing_data(market, index, count):
         print(f"FATAL ERROR: Network error fetching data from {market}: {e}")
         return []
 
-# 【新增：提取核心图片 ID 的辅助函数】
 def extract_unique_id(base_url):
     """
     从完整的 urlbase 中提取唯一的、跨市场不变的核心图片标识符。
     例如：从 th?id=OHR.ColosseumRome_DE-DE9770926344 提取 ColosseumRome
     """
-    # 步骤 1: 清理 base_url，只保留文件名部分
     cleaned_url = base_url.split('/')[-1]
-
-    # 步骤 2: 尝试从 OHR. 之后提取 ID，直到遇到第一个下划线 _ 为止
+    # 尝试从 OHR. 之后提取 ID，直到遇到第一个下划线 _ 为止
     match = re.search(r'OHR\.([A-Za-z0-9]+)_', cleaned_url)
 
     if match:
-        # 成功提取了核心名称
         return match.group(1)
     else:
         # 回退：如果格式异常，使用清理后的 URL 作为 ID
@@ -104,7 +113,6 @@ def sanitize_filename(filename):
     # 截断过长的标题，避免文件名过长
     return safe_name[:80]
 
-# 【使用 OHR 唯一 ID 命名】
 def download_image_unified(base_url, start_date, title, unique_image_id):
     """下载图片并保存到目标目录，使用【核心 ID】实现严格去重"""
     # 构建图片下载 URL - 使用原始 URLBase
@@ -150,7 +158,7 @@ def main():
     """主函数 - 聚合多市场数据并【基于核心 ID】去重下载"""
     
     # 用于存储所有不重复图片的元数据
-    # 【核心改动】：现在使用 unique_image_id 作为键
+    # 键是 unique_image_id
     unique_images_map = {}
     
     print(f"Attempting to fetch {NUM_IMAGES_TO_FETCH} images from {len(MARKETS_TO_CHECK)} global markets.")
