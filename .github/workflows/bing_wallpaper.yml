@@ -11,9 +11,9 @@ on:
       - '.github/workflows/bing_wallpaper.yml'
  
   # 定时触发：每日定时运行 (cron 表达式使用 UTC 时间)
-  # '0 7 * * *' 对应 UTC 2:00，即上海时区 (UTC+8) 的每天上午 10:00
+
   schedule:
-    - cron: '0 2 * * *'
+    - cron: '0 7 * * *'
 # 2. 环境变量 (用于确保 Git 提交时间戳和脚本的时区一致)
 env:
   TZ: Asia/Shanghai
