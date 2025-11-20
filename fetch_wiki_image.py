@@ -12,7 +12,7 @@ SHANGHAI_TZ = pytz.timezone('Asia/Shanghai')
 API_ENDPOINT = "https://commons.wikimedia.org/w/api.php"
 # 必须设置 User-Agent，请替换为您的联系邮箱
 HEADERS = {
-    'User-Agent': 'GitHubActionWikiPotdBatchDownloader/6.0 (contact: YourContact@example.com)'
+    'User-Agent': 'GitHubActionWikiPotdBatchDownloader/6.1 (contact: YourContact@example.com)'
 }
 # 存储图片的根目录
 BASE_DOWNLOAD_DIR = 'wiki_image'
@@ -42,7 +42,8 @@ def get_potd_filename(date_str):
         "text": template_text
     }
     
-    response = requests.get(API_ENDPOINT, headers=HEADERS, params=params)
+    # *** 关键修改：添加 timeout ***
+    response = requests.get(API_ENDPOINT, headers=HEADERS, params=params, timeout=10)
     response.raise_for_status()
     data = response.json()
     
@@ -69,10 +70,11 @@ def get_image_details(filename):
         "format": "json",
         "titles": f"File:{filename}",
         "prop": "imageinfo",
-        "iiprop": "url|mime" # 只需要 URL 和 MIME
+        "iiprop": "url|mime"
     }
     
-    response = requests.get(API_ENDPOINT, headers=HEADERS, params=params)
+    # *** 关键修改：添加 timeout ***
+    response = requests.get(API_ENDPOINT, headers=HEADERS, params=params, timeout=10)
     response.raise_for_status()
     data = response.json()
     
@@ -104,18 +106,16 @@ def download_image_file(url, mime_type, target_dir, date_str):
     file_name = date_str + ext
     file_path = os.path.join(target_dir, file_name)
     
-    # 检查文件是否已存在，实现增量更新
     if os.path.exists(file_path):
         print(f"   [SKIP] 图片已存在，跳过下载: {file_path}")
         return
         
     print(f"   [DL] 正在下载图片到 {file_path}...")
     
-    # 下载请求
-    img_response = requests.get(url, stream=True, headers=HEADERS)
+    # *** 关键修改：添加 timeout (图片下载允许更长) ***
+    img_response = requests.get(url, stream=True, headers=HEADERS, timeout=30)
     img_response.raise_for_status()
     
-    # 写入文件
     with open(file_path, 'wb') as f:
         for chunk in img_response.iter_content(chunk_size=8192):
             f.write(chunk)
@@ -128,9 +128,7 @@ def process_date(current_date):
     处理特定日期的 POTD 下载。
     """
     date_str = current_date.strftime('%Y-%m-%d')
-    print(f"\n>>>> 正在处理日期: {date_str} <<<<")
-    
-    # 构造目标目录: wiki_image/YYYY/MM/
+    # ... 省略目录创建逻辑 ...
     target_dir = os.path.join(
         BASE_DOWNLOAD_DIR,
         current_date.strftime('%Y'),
@@ -138,14 +136,11 @@ def process_date(current_date):
     )
     os.makedirs(target_dir, exist_ok=True)
     
+    print(f"\n>>>> 正在处理日期: {date_str} <<<<") # 此处 print 也会被缓冲
+
     try:
-        # 1. 获取文件名
         filename = get_potd_filename(date_str)
-        
-        # 2. 获取图片详情
         details = get_image_details(filename)
-        
-        # 3. 下载实际图片文件（包含存在性检查和跳过逻辑）
         download_image_file(
             url=details['url'],
             mime_type=details['mime'],
@@ -155,6 +150,8 @@ def process_date(current_date):
         
     except ValueError as e:
         print(f"   [FAIL] 跳过 (无图片或 API 错误): {e}")
+    except requests.exceptions.Timeout:
+         print(f"   [FAIL] 请求超时 (Timeout)，跳过该日期。")
     except requests.exceptions.HTTPError as e:
         print(f"   [FAIL] HTTP 错误 {e.response.status_code}，跳过该日期。")
     except Exception as e:
@@ -165,25 +162,21 @@ def fetch_and_save_wiki_picture():
     """
     批量获取从 START_YEAR 到今天的所有每日图片。
     """
-    # 获取上海时区的今天的零点
     now_shanghai = datetime.now(SHANGHAI_TZ).replace(hour=0, minute=0, second=0, microsecond=0)
-    
-    # 确定起始日期
     start_date = datetime(START_YEAR, 1, 1, tzinfo=SHANGHAI_TZ)
-    
-    # 确保起始日期不晚于当前日期
     if start_date > now_shanghai:
         start_date = now_shanghai
 
     current_date = start_date
     
-    print(f"🔥 任务开始：从 {start_date.strftime('%Y-%m-%d')} 到 {now_shanghai.strftime('%Y-%m-%d')} 批量下载 POTD。")
+    # *** 关键修改：强制刷新输出缓冲区 ***
+    print(f"🔥 任务开始：从 {start_date.strftime('%Y-%m-%d')} 到 {now_shanghai.strftime('%Y-%m-%d')} 批量下载 POTD。", flush=True)
     
     while current_date <= now_shanghai:
         process_date(current_date)
         current_date += timedelta(days=1)
         
-    print("\n🎉 批量下载任务完成！")
+    print("\n🎉 批量下载任务完成！", flush=True)
 
 
 if __name__ == "__main__":
