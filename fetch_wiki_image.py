@@ -3,64 +3,114 @@ from datetime import datetime
 import pytz
 import json
 import os
+import re
 
 # 设置时区为上海
 SHANGHAI_TZ = pytz.timezone('Asia/Shanghai')
+# 维基共享资源 API
+API_ENDPOINT = "https://commons.wikimedia.org/w/api.php"
+# 必须设置 User-Agent，避免 403 问题的关键，请替换为您的联系方式
+HEADERS = {
+    'User-Agent': 'GitHubActionScript/2.0 (contact: your-email@example.com)'
+}
+
+def get_potd_filename(date_str):
+    """
+    第一步：通过展开 POTD 模板获取当天的图片文件名 (来自 Wikimedia Commons)。
+    """
+    template_text = f"{{{{Potd/{date_str}}}}}"
+    params = {
+        "action": "expandtemplates",
+        "format": "json",
+        "prop": "wikitext",
+        "text": template_text
+    }
+    
+    response = requests.get(API_ENDPOINT, headers=HEADERS, params=params)
+    response.raise_for_status()
+    data = response.json()
+    
+    # 展开模板的结果通常直接是图片文件名
+    wikitext = data.get('expandtemplates', {}).get('wikitext', {}).get('*', '').strip()
+    
+    if not wikitext:
+        # 如果是未来日期（如您测试的 2025-11-20），模板可能为空
+        raise ValueError("无法展开 POTD 模板，可能是日期太靠前，或当天无图片。")
+        
+    return wikitext
+
+def get_image_details(filename):
+    """
+    第二步：获取图片文件的详细信息和 URL。
+    """
+    params = {
+        "action": "query",
+        "format": "json",
+        "titles": f"File:{filename}",
+        "prop": "imageinfo",
+        "iiprop": "url|extmetadata|mime|size" # 获取 URL, 元数据, MIME 类型, 大小
+    }
+    
+    response = requests.get(API_ENDPOINT, headers=HEADERS, params=params)
+    response.raise_for_status()
+    data = response.json()
+    
+    # 解析页面ID
+    page_id = next(iter(data.get('query', {}).get('pages', {})))
+    page_info = data['query']['pages'][page_id]
+    
+    if page_id == '-1':
+        raise ValueError(f"无法找到文件: {filename}")
+        
+    image_info = page_info.get('imageinfo', [{}])[0]
+    
+    if not image_info:
+        raise ValueError(f"无法获取文件详情: {filename}")
+        
+    # 提取 Caption，并尝试去除 HTML 标签，使其更易读
+    caption_raw = image_info.get('extmetadata', {}).get('Caption', {}).get('value', 'N/A')
+    caption = re.sub('<[^<]+?>', '', caption_raw)
+
+    return {
+        'title': page_info.get('title'),
+        'url': image_info.get('url'),
+        'mime': image_info.get('mime'),
+        'caption': caption.strip()
+    }
+
 
 def fetch_and_save_wiki_picture():
     """
-    使用 Wikimedia REST API 获取维基百科每日图片并保存。
+    获取维基媒体共享资源每日图片并保存。
     """
-    # 1. 获取当前上海时间并格式化
-    now_shanghai = datetime.now(SHANGHAI_TZ)
-    # REST API 使用 YYYY/MM/DD 格式
-    date_path = now_shanghai.strftime('%Y/%m/%d')
-    timestamp_filename = now_shanghai.strftime('%Y-%m-%d-%H-%M-%S') + '.txt'
-    
-    # 2. 构造 Wikimedia REST API URL
-    # 这个 API 专门用于获取某一天的精选内容（包括每日图片）
-    API_URL = f"https://en.wikipedia.org/api/rest_v1/feed/featured/{date_path}"
-    
-    # 3. 设置 User-Agent 头部 (解决 403 问题的关键)
-    # 请将 YourName/YourAppVersion 替换为您的应用名称和版本，并提供一个联系邮箱
-    headers = {
-        'User-Agent': 'YourGitHubActionScript/1.0 (contact: your-email@example.com)'
-    }
-
-    print(f"尝试从 {API_URL} 获取数据...")
-    
     try:
-        # 发送请求
-        response = requests.get(API_URL, headers=headers)
-        response.raise_for_status() # 如果状态码是 4xx 或 5xx，将抛出异常
-
-        data = response.json()
-
-        # 从响应中提取每日图片 (Picture of the Day) 部分
-        potd_data = data.get('tfa') # 通常 Daily Featured Article 在 tfa，每日图片在 potd，但 Featured Feed 结构会变化
+        # 1. 获取当前上海时间并格式化
+        now_shanghai = datetime.now(SHANGHAI_TZ)
+        date_str_potd = now_shanghai.strftime('%Y-%m-%d')
         
-        # 更好的方法是直接寻找 'onthisday' 或 'potd'
-        potd_data = data.get('potd')
-        if not potd_data:
-            raise ValueError("API响应中未找到每日图片 (POTD) 数据。")
-
-        # 提取关键信息
-        image_title = potd_data.get('title', 'N/A')
-        image_url = potd_data.get('originalimage', {}).get('source', 'N/A')
-        image_caption = potd_data.get('caption', {}).get('text', 'N/A')
+        # 2. 获取文件名 (第一步 API)
+        print(f"步骤 1/2: 正在获取 {date_str_potd} 的图片文件名...")
+        filename = get_potd_filename(date_str_potd)
+        print(f"找到文件名: {filename}")
         
-        # 格式化输出内容
+        # 3. 获取图片详情 (第二步 API)
+        print(f"步骤 2/2: 正在获取图片详情和 URL...")
+        details = get_image_details(filename)
+        
+        # 4. 格式化输出内容
         result_content = (
-            f"--- Wikipedia Picture of the Day for {date_path.replace('/', '-')} ---\n\n"
-            f"Image Title: {image_title}\n"
-            f"Image URL: {image_url}\n"
-            f"Caption: {image_caption}\n\n"
-            f"Raw Data:\n{json.dumps(potd_data, indent=2, ensure_ascii=False)}"
+            f"--- Wikimedia Commons Picture of the Day for {date_str_potd} ---\n\n"
+            f"File Name: {filename}\n"
+            f"Full Page Title: {details['title']}\n"
+            f"Image URL: {details['url']}\n"
+            f"MIME Type: {details['mime']}\n"
+            f"Caption (Simplified): {details['caption']}\n"
         )
         
-        # 4. 构造文件名和路径
+        # 5. 构造文件名和路径 (保持与您的要求一致)
         year = now_shanghai.strftime('%Y')
         month = now_shanghai.strftime('%m')
+        timestamp_filename = now_shanghai.strftime('%Y-%m-%d-%H-%M-%S') + '.txt'
         
         # 目标目录: YYYY/MM
         target_dir = os.path.join(year, month)
@@ -69,7 +119,7 @@ def fetch_and_save_wiki_picture():
         # 目标文件路径
         file_path = os.path.join(target_dir, timestamp_filename)
         
-        # 5. 写入文件
+        # 6. 写入文件
         with open(file_path, 'w', encoding='utf-8') as f:
             f.write(result_content)
         
@@ -77,6 +127,11 @@ def fetch_and_save_wiki_picture():
         
     except requests.exceptions.RequestException as e:
         print(f"❌ 发生网络请求错误: {e}")
+        if e.response is not None:
+             print(f"HTTP 状态码: {e.response.status_code}")
+        exit(1)
+    except ValueError as e:
+        print(f"❌ 数据解析或查找错误: {e}")
         exit(1)
     except Exception as e:
         print(f"❌ 发生其他错误: {e}")
