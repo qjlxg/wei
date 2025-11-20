@@ -23,7 +23,6 @@ jobs:
       - name: ⬇️ Checkout repository (获取完整历史用于推送)
         uses: actions/checkout@v4
         with:
-          # fetch-depth: 0 对于需要 git push 的工作流是必要的
           fetch-depth: 0 
 
       # 2. 设置 Python 环境
@@ -38,7 +37,7 @@ jobs:
 
       # 4. 运行 Python 脚本
       - name: 🚀 Run script to fetch and download data
-        # 脚本将创建 YYYY/MM/YYYY-MM-DD-HH-MM-SS.ext (图片) 和 YYYY/MM/YYYY-MM-DD-HH-MM-SS_meta.txt (元数据)
+        # 脚本将创建 wiki_image/YYYY/MM/YYYY-MM-DD.ext 文件
         run: python fetch_wiki_image.py
 
       # 5. Git 配置 (必须，用于标识提交者身份)
@@ -47,14 +46,14 @@ jobs:
           git config user.name "GitHub Actions Bot"
           git config user.email "github-actions-bot@users.noreply.github.com"
           
-      # 6. 检查是否有文件变动并准备提交 (关键修改：确保 git add 在检查之前运行)
+      # 6. 检查是否有文件变动并准备提交
       - name: 📝 Stage changes and Check for changes
         id: stage
         run: |
-          # 尝试添加所有新创建的目录和文件到暂存区
+          # 添加 BASE_DOWNLOAD_DIR 下的所有文件（如果有新下载的文件）
           git add .
           
-          # 检查暂存区是否为空。如果为空，则没有变化。
+          # 检查暂存区是否为空。
           if git diff --cached --quiet; then
             echo "::set-output name=has_changes::false"
           else
@@ -63,13 +62,12 @@ jobs:
 
       # 7. 提交并推送新文件 (仅当有变动时)
       - name: 📤 Commit and push new file
-        # 仅当步骤 6 检测到文件变动时才执行
         if: steps.stage.outputs.has_changes == 'true'
         run: |
-          # 创建提交信息，包含日期
-          COMMIT_MESSAGE="feat: Add POTD for $(TZ='Asia/Shanghai' date +'%Y-%m-%d')"
+          # 提交信息反映这是批量/增量更新
+          COMMIT_MESSAGE="feat: Incremental update of POTD archive up to $(TZ='Asia/Shanghai' date +'%Y-%m-%d')"
           
-          # 提交（文件已经在上一步被 git add . 了）
+          # 提交
           git commit -m "$COMMIT_MESSAGE"
           
           # 推送回仓库
