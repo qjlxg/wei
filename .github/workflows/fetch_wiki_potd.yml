@@ -1,0 +1,78 @@
+name: 📸 Fetch Wikipedia Picture of the Day
+
+# 触发条件
+on:
+  # 1. 手动触发
+  workflow_dispatch:
+  # 2. 当脚本或工作流文件变动时自动运行
+  push:
+    paths:
+      - 'fetch_wiki_image.py'
+      - '.github/workflows/fetch_wiki_potd.yml'
+
+# 设置环境变量，用于设定时区
+env:
+  TZ: Asia/Shanghai # 设置时区为上海时区
+
+jobs:
+  fetch_and_commit:
+    runs-on: ubuntu-latest
+    
+    steps:
+      # 1. 检出代码
+      - name: ⬇️ Checkout repository
+        uses: actions/checkout@v4
+        # 启用 'fetch-depth: 0' 以确保能正确推送 (非必须，但推荐用于复杂的 git 操作)
+        with:
+          fetch-depth: 0
+
+      # 2. 设置 Python 环境
+      - name: 🐍 Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      # 3. 安装依赖
+      - name: ⚙️ Install dependencies
+        run: pip install requests pytz
+
+      # 4. 运行 Python 脚本
+      - name: 🚀 Run script to fetch data
+        # 脚本将生成 YYYY/MM/YYYY-MM-DD-HH-MM-SS.txt 文件
+        run: python fetch_wiki_image.py
+
+      # 5. Git 配置 (必须，用于标识提交者)
+      - name: 👤 Configure Git
+        run: |
+          git config user.name "GitHub Actions Bot"
+          git config user.email "github-actions-bot@users.noreply.github.com"
+          
+      # 6. 检查是否有新的文件生成或变动
+      - name: 🔍 Check for changes
+        id: git_status
+        run: |
+          # 检查暂存区和工作目录中是否有未提交的变动 (即新生成的文件)
+          if git diff --quiet && git diff --staged --quiet; then
+            echo "::set-output name=has_changes::false"
+          else
+            echo "::set-output name=has_changes::true"
+          fi
+        # 注意: set-output 在 actions/checkout@v4 中已被弃用，但在许多旧教程中仍使用。
+        # 实际项目中应使用 $GITHUB_OUTPUT，为简洁起见，此处保留经典写法，但需注意兼容性。
+        # 推荐的写法是：echo "has_changes=true" >> $GITHUB_OUTPUT
+
+      # 7. 提交并推送新文件 (仅当有变动时)
+      - name: 📤 Commit and push new file
+        if: steps.git_status.outputs.has_changes == 'true'
+        run: |
+          # 添加所有新生成的文件
+          git add .
+          
+          # 创建提交信息，包含日期和时间
+          COMMIT_MESSAGE="feat: Add Wikipedia Picture of the Day for $(TZ='Asia/Shanghai' date +'%Y-%m-%d')"
+          
+          # 提交
+          git commit -m "$COMMIT_MESSAGE"
+          
+          # 推送回仓库
+          git push
