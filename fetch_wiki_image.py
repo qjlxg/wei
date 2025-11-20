@@ -1,18 +1,23 @@
 import requests
-from datetime import datetime
+from datetime import datetime, timedelta
 import pytz
 import json
 import os
 import re
 
+# --- 配置 ---
 # 设置时区为上海
 SHANGHAI_TZ = pytz.timezone('Asia/Shanghai')
 # 维基共享资源 API
 API_ENDPOINT = "https://commons.wikimedia.org/w/api.php"
-# 必须设置 User-Agent，用于识别您的应用并避免 403 错误
+# 必须设置 User-Agent，请替换为您的联系邮箱
 HEADERS = {
-    'User-Agent': 'GitHubActionWikiPotdScript/4.0 (contact: YourContact@example.com)'
+    'User-Agent': 'GitHubActionWikiPotdBatchDownloader/5.0 (contact: YourContact@example.com)'
 }
+# 存储图片的根目录
+BASE_DOWNLOAD_DIR = 'wiki_image'
+# 开始批量下载的年份（可以根据需要调整）
+START_YEAR = 2024
 
 # MIME 类型到文件扩展名的映射
 MIME_TO_EXT = {
@@ -20,8 +25,11 @@ MIME_TO_EXT = {
     'image/png': '.png',
     'image/gif': '.gif',
     'image/svg+xml': '.svg',
-    # 可以根据需要添加其他常见格式
+    # 添加其他格式...
+    'application/octet-stream': '.bin' # 默认未知类型
 }
+# --- 配置结束 ---
+
 
 def get_potd_filename(date_str):
     """
@@ -50,7 +58,8 @@ def get_potd_filename(date_str):
         wikitext = wikitext_node.strip()
         
     if not wikitext:
-        raise ValueError(f"无法展开 POTD 模板 ({date_str})，可能是日期太靠前或当天无图片。")
+        # 如果模板展开为空，可能是该日没有 POTD，这在历史数据中很常见
+        raise ValueError(f"无法展开 POTD 模板 ({date_str})。")
         
     return wikitext
 
@@ -95,17 +104,23 @@ def get_image_details(filename):
         'caption': caption.strip()
     }
 
-def download_image_file(url, mime_type, target_dir, timestamp_name):
+def download_image_file(url, mime_type, target_dir, date_str):
     """
-    下载图片文件并根据 MIME 类型确定后缀。
+    下载图片文件，并使用日期作为文件名基准。
     """
-    ext = MIME_TO_EXT.get(mime_type, '.bin')  # 默认使用 .bin 作为后缀，如果 MIME 类型未知
+    ext = MIME_TO_EXT.get(mime_type, '.bin')
+    # 文件名格式：YYYY-MM-DD.ext
+    file_name = date_str + ext
+    file_path = os.path.join(target_dir, file_name)
     
-    file_path = os.path.join(target_dir, timestamp_name + ext)
+    # 检查文件是否已存在，实现增量更新
+    if os.path.exists(file_path):
+        print(f"   [SKIP] 图片已存在，跳过下载: {file_path}")
+        return file_path
+        
+    print(f"   [DL] 正在下载图片到 {file_path}...")
     
-    print(f"步骤 3/3: 正在下载图片到 {file_path}...")
-    
-    # 下载请求，使用 stream=True 以便处理大文件
+    # 下载请求
     img_response = requests.get(url, stream=True, headers=HEADERS)
     img_response.raise_for_status()
     
@@ -114,69 +129,98 @@ def download_image_file(url, mime_type, target_dir, timestamp_name):
         for chunk in img_response.iter_content(chunk_size=8192):
             f.write(chunk)
             
-    print(f"✅ 图片文件下载并保存完成: {file_path}")
+    print(f"   [DONE] 图片文件下载并保存完成。")
     return file_path
+
+
+def save_metadata(details, date_str, target_dir):
+    """
+    保存图片的元数据文件。
+    """
+    metadata_file_name = date_str + '_meta.txt'
+    metadata_file_path = os.path.join(target_dir, metadata_file_name)
+    
+    # 检查元数据文件是否已存在
+    if os.path.exists(metadata_file_path):
+        return
+    
+    result_content = (
+        f"--- Wikimedia Commons Picture of the Day Metadata for {date_str} ---\n\n"
+        f"File Name: {details['title'].replace('File:', '')}\n"
+        f"Image URL: {details['url']}\n"
+        f"MIME Type: {details['mime']}\n"
+        f"Caption: {details['caption']}\n"
+    )
+    with open(metadata_file_path, 'w', encoding='utf-8') as f:
+        f.write(result_content)
+
+
+def process_date(current_date):
+    """
+    处理特定日期的 POTD 下载和保存。
+    """
+    date_str = current_date.strftime('%Y-%m-%d')
+    print(f"\n>>>> 正在处理日期: {date_str} <<<<")
+    
+    # 构造目标目录: BASE_DOWNLOAD_DIR/YYYY/MM/
+    target_dir = os.path.join(
+        BASE_DOWNLOAD_DIR,
+        current_date.strftime('%Y'),
+        current_date.strftime('%m')
+    )
+    os.makedirs(target_dir, exist_ok=True)
+    
+    try:
+        # 1. 获取文件名
+        filename = get_potd_filename(date_str)
+        
+        # 2. 获取图片详情
+        details = get_image_details(filename)
+        
+        # 3. 下载实际图片文件（包含存在性检查和跳过逻辑）
+        download_image_file(
+            url=details['url'],
+            mime_type=details['mime'],
+            target_dir=target_dir,
+            date_str=date_str
+        )
+        
+        # 4. 保存元数据
+        save_metadata(details, date_str, target_dir)
+        
+    except ValueError as e:
+        # 无法找到 POTD 文件名，可能是当日无图片，跳过
+        print(f"   [FAIL] 跳过: {e}")
+    except requests.exceptions.HTTPError as e:
+        # 网络请求失败，通常是 404 或 403
+        print(f"   [FAIL] HTTP 错误 {e.response.status_code}，跳过该日期。")
+    except Exception as e:
+        print(f"   [FAIL] 发生意外错误，跳过该日期: {e}")
 
 
 def fetch_and_save_wiki_picture():
     """
-    获取维基媒体共享资源每日图片并保存。
+    批量获取从 START_YEAR 到今天的所有每日图片。
     """
-    try:
-        # 1. 获取当前上海时间并格式化
-        now_shanghai = datetime.now(SHANGHAI_TZ)
-        date_str_potd = now_shanghai.strftime('%Y-%m-%d')
-        
-        # 2. 构造路径和文件基础名
-        year = now_shanghai.strftime('%Y')
-        month = now_shanghai.strftime('%m')
-        timestamp_name = now_shanghai.strftime('%Y-%m-%d-%H-%M-%S')
-        target_dir = os.path.join(year, month)
-        os.makedirs(target_dir, exist_ok=True)
-        
-        # 3. 获取文件名 (第一步 API)
-        print(f"步骤 1/3: 正在获取 {date_str_potd} 的图片文件名...")
-        filename = get_potd_filename(date_str_potd)
-        print(f"找到文件名: {filename}")
-        
-        # 4. 获取图片详情 (第二步 API)
-        print(f"步骤 2/3: 正在获取图片详情、URL 和 MIME 类型...")
-        details = get_image_details(filename)
-        
-        # 5. 下载实际图片文件 (新步骤)
-        download_path = download_image_file(
-            url=details['url'],
-            mime_type=details['mime'],
-            target_dir=target_dir,
-            timestamp_name=timestamp_name
-        )
-        
-        # 6. (可选) 同时保存元数据文件 (仍推荐保留)
-        metadata_file_path = os.path.join(target_dir, timestamp_name + '_meta.txt')
-        result_content = (
-            f"--- Wikimedia Commons Picture of the Day Metadata ---\n\n"
-            f"File Name: {filename}\n"
-            f"Image URL: {details['url']}\n"
-            f"Local File: {os.path.basename(download_path)}\n"
-            f"MIME Type: {details['mime']}\n"
-            f"Caption: {details['caption']}\n"
-        )
-        with open(metadata_file_path, 'w', encoding='utf-8') as f:
-            f.write(result_content)
+    now_shanghai = datetime.now(SHANGHAI_TZ).replace(hour=0, minute=0, second=0, microsecond=0)
+    
+    # 确定起始日期
+    start_date = datetime(START_YEAR, 1, 1, tzinfo=SHANGHAI_TZ)
+    
+    # 如果起始年份晚于当前年份，则以起始年份为准，否则以当前年份为准（防止下载未来日期）
+    if start_date > now_shanghai:
+        start_date = now_shanghai
 
-        print(f"✅ 元数据保存完成: {metadata_file_path}")
+    current_date = start_date
+    
+    print(f"🔥 任务开始：从 {start_date.strftime('%Y-%m-%d')} 到 {now_shanghai.strftime('%Y-%m-%d')} 批量下载 POTD。")
+    
+    while current_date <= now_shanghai:
+        process_date(current_date)
+        current_date += timedelta(days=1)
         
-    except requests.exceptions.RequestException as e:
-        print(f"❌ 发生网络请求错误: {e}")
-        if e.response is not None:
-             print(f"HTTP 状态码: {e.response.status_code}")
-        exit(1)
-    except ValueError as e:
-        print(f"❌ 数据解析或查找错误: {e}")
-        exit(1)
-    except Exception as e:
-        print(f"❌ 发生其他错误: {e}")
-        exit(1)
+    print("\n🎉 批量下载任务完成！")
+
 
 if __name__ == "__main__":
     fetch_and_save_wiki_picture()
