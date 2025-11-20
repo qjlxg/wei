@@ -9,64 +9,58 @@ SHANGHAI_TZ = pytz.timezone('Asia/Shanghai')
 
 def fetch_and_save_wiki_picture():
     """
-    获取维基百科每日图片并保存到带有上海时区时间戳的文件中。
+    使用 Wikimedia REST API 获取维基百科每日图片并保存。
     """
-    try:
-        # 获取当前上海时间
-        now_shanghai = datetime.now(SHANGHAI_TZ)
-        
-        # 构造API请求URL以获取维基百科每日图片 (使用 /page/media-list)
-        # 注意：这只是一个示例。维基百科“每日图片”的最佳获取方法是使用MediaWiki API
-        # 这里的示例是获取主页上的每日图片，通常在 'Featured picture' 模块中。
-        # 实际操作中，您可能需要更复杂的解析或者使用专门的API。
-        
-        # 示例：获取特定日期 (当天) 的每日图片信息
-        # 维基百科每日图片模板名称通常是 Template:Potd/YYYY-MM-DD
-        date_str = now_shanghai.strftime('%Y-%m-%d')
-        template_name = f'Template:Potd/{date_str}'
-        
-        API_ENDPOINT = "https://en.wikipedia.org/w/api.php"
-        params = {
-            "action": "query",
-            "format": "json",
-            "prop": "imageinfo",
-            "titles": template_name,
-            "iiprop": "url|extmetadata",
-            "generator": "templates",
-            "gtprop": "title",
-            "gttitle": "Main_Page",
-            "gtnamespace": "10", # Template namespace
-            "gtlimit": "1" # Limit to 1 result
-        }
+    # 1. 获取当前上海时间并格式化
+    now_shanghai = datetime.now(SHANGHAI_TZ)
+    # REST API 使用 YYYY/MM/DD 格式
+    date_path = now_shanghai.strftime('%Y/%m/%d')
+    timestamp_filename = now_shanghai.strftime('%Y-%m-%d-%H-%M-%S') + '.txt'
+    
+    # 2. 构造 Wikimedia REST API URL
+    # 这个 API 专门用于获取某一天的精选内容（包括每日图片）
+    API_URL = f"https://en.wikipedia.org/api/rest_v1/feed/featured/{date_path}"
+    
+    # 3. 设置 User-Agent 头部 (解决 403 问题的关键)
+    # 请将 YourName/YourAppVersion 替换为您的应用名称和版本，并提供一个联系邮箱
+    headers = {
+        'User-Agent': 'YourGitHubActionScript/1.0 (contact: your-email@example.com)'
+    }
 
-        # 实际上，维基百科每日图片通常直接使用一个固定的模板，我们尝试直接获取其内容
-        params = {
-            "action": "query",
-            "format": "json",
-            "prop": "revisions",
-            "titles": f"Template:Potd/{date_str}",
-            "rvprop": "content",
-            "rvlimit": "1",
-            "rvcontentformat": "text/x-wiki"
-        }
-        
-        response = requests.get(API_ENDPOINT, params=params)
-        response.raise_for_status()
+    print(f"尝试从 {API_URL} 获取数据...")
+    
+    try:
+        # 发送请求
+        response = requests.get(API_URL, headers=headers)
+        response.raise_for_status() # 如果状态码是 4xx 或 5xx，将抛出异常
+
         data = response.json()
+
+        # 从响应中提取每日图片 (Picture of the Day) 部分
+        potd_data = data.get('tfa') # 通常 Daily Featured Article 在 tfa，每日图片在 potd，但 Featured Feed 结构会变化
         
-        # 尝试解析内容 (这可能因维基模板结构而异，以下是一个通用尝试)
-        page_id = next(iter(data['query']['pages']))
-        content = data['query']['pages'][page_id]['revisions'][0]['*']
+        # 更好的方法是直接寻找 'onthisday' 或 'potd'
+        potd_data = data.get('potd')
+        if not potd_data:
+            raise ValueError("API响应中未找到每日图片 (POTD) 数据。")
+
+        # 提取关键信息
+        image_title = potd_data.get('title', 'N/A')
+        image_url = potd_data.get('originalimage', {}).get('source', 'N/A')
+        image_caption = potd_data.get('caption', {}).get('text', 'N/A')
         
-        # 从内容中提取文件名（通常在 {{1/Potd/...}} 或 [[File:...] 中）
-        # 这是一个简化的示例，仅将整个模板内容作为结果
-        result_content = f"--- Wikipedia Picture of the Day for {date_str} ---\n\n"
-        result_content += content
+        # 格式化输出内容
+        result_content = (
+            f"--- Wikipedia Picture of the Day for {date_path.replace('/', '-')} ---\n\n"
+            f"Image Title: {image_title}\n"
+            f"Image URL: {image_url}\n"
+            f"Caption: {image_caption}\n\n"
+            f"Raw Data:\n{json.dumps(potd_data, indent=2, ensure_ascii=False)}"
+        )
         
-        # 构造文件名和路径
+        # 4. 构造文件名和路径
         year = now_shanghai.strftime('%Y')
         month = now_shanghai.strftime('%m')
-        timestamp_filename = now_shanghai.strftime('%Y-%m-%d-%H-%M-%S') + '.txt'
         
         # 目标目录: YYYY/MM
         target_dir = os.path.join(year, month)
@@ -75,7 +69,7 @@ def fetch_and_save_wiki_picture():
         # 目标文件路径
         file_path = os.path.join(target_dir, timestamp_filename)
         
-        # 写入文件
+        # 5. 写入文件
         with open(file_path, 'w', encoding='utf-8') as f:
             f.write(result_content)
         
