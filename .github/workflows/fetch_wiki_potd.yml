@@ -12,7 +12,7 @@ on:
 
 # 设置环境变量
 env:
-  TZ: Asia/Shanghai # 设置工作流中的时间基准为上海时区
+  TZ: Asia/Shanghai # 设置工作流中的时间基准为上海时区 (Asia/Shanghai)
 
 jobs:
   fetch_and_commit:
@@ -23,7 +23,7 @@ jobs:
       - name: ⬇️ Checkout repository (获取完整历史用于推送)
         uses: actions/checkout@v4
         with:
-          # fetch-depth: 0 确保获取完整 Git 历史，这对后续的 git push 是必要的
+          # fetch-depth: 0 对于需要 git push 的工作流是必要的
           fetch-depth: 0 
 
       # 2. 设置 Python 环境
@@ -32,7 +32,7 @@ jobs:
         with:
           python-version: '3.x'
 
-      # 3. 安装依赖 (requests 用于网络请求，pytz 用于时区处理)
+      # 3. 安装依赖 (requests 和 pytz)
       - name: ⚙️ Install dependencies
         run: pip install requests pytz
 
@@ -47,12 +47,15 @@ jobs:
           git config user.name "GitHub Actions Bot"
           git config user.email "github-actions-bot@users.noreply.github.com"
           
-      # 6. 检查是否有新的文件生成或变动
-      - name: 🔍 Check for changes
-        id: git_status
+      # 6. 检查是否有文件变动并准备提交 (关键修改：确保 git add 在检查之前运行)
+      - name: 📝 Stage changes and Check for changes
+        id: stage
         run: |
-          # 检查工作目录中是否有未提交的新文件（即脚本生成的文件）
-          if git diff --quiet && git diff --staged --quiet; then
+          # 尝试添加所有新创建的目录和文件到暂存区
+          git add .
+          
+          # 检查暂存区是否为空。如果为空，则没有变化。
+          if git diff --cached --quiet; then
             echo "::set-output name=has_changes::false"
           else
             echo "::set-output name=has_changes::true"
@@ -61,15 +64,12 @@ jobs:
       # 7. 提交并推送新文件 (仅当有变动时)
       - name: 📤 Commit and push new file
         # 仅当步骤 6 检测到文件变动时才执行
-        if: steps.git_status.outputs.has_changes == 'true'
+        if: steps.stage.outputs.has_changes == 'true'
         run: |
-          # 添加所有新生成的文件
-          git add .
-          
           # 创建提交信息，包含日期
           COMMIT_MESSAGE="feat: Add POTD for $(TZ='Asia/Shanghai' date +'%Y-%m-%d')"
           
-          # 提交
+          # 提交（文件已经在上一步被 git add . 了）
           git commit -m "$COMMIT_MESSAGE"
           
           # 推送回仓库
