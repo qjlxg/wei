@@ -1,82 +1,78 @@
-# script.py  —— 极简版：只找 BPB Panel 版本 ≥ 2.5.3
+# script.py  —— 多线程并行版（默认 15 线程，可调）
 import requests
-import re
 from packaging import version
+import re
 import time
 import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
-# 输入文件（支持纯IP或域名，一行一个）
 INPUT_FILE = "1.txt"
-# 最终结果文件
 OK_FILE = "OK.txt"
+THREADS = 15          # 这里改线程数，建议 10~30
 
-# 关闭 SSL 警告（很多面板自签证书）
 requests.packages.urllib3.disable_warnings()
 
-def get_target_url(line):
+def get_url(line):
     host = line.strip()
-    if not host:
-        return None
-    return f"https://{host}/login"
+    return f"https://{host}/login" if host else None
 
 def extract_version(text):
     patterns = [
         r'BPB Panel.*?([0-9]+\.[0-9]+\.[0-9]+)',
         r'BPB Panel v([0-9]+\.[0-9]+\.[0-9]+)',
         r'"version"\s*:\s*"([0-9]+\.[0-9]+\.[0-9]+)"',
-        r'Version[:\s]*([0-9]+\.[0-9]+\.[0-9]+)',
     ]
     for p in patterns:
         m = re.search(p, text, re.I)
-        if m:
-            return m.group(1)
+        if m: return m.group(1)
+    return None
+
+def check_one(url):
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+    try:
+        r = requests.get(url, headers=headers, timeout=12, verify=False, allow_redirects=True)
+        if r.status_code != 200:
+            return None
+        if "BPB Panel" not in r.text and "bpbpanel" not in r.text.lower():
+            return None
+        ver = extract_version(r.text)
+        if ver and version.parse(ver) >= version.parse("2.5.3"):
+            return f"{url}  # 版本: {ver}"
+    except:
+        pass
     return None
 
 def main():
     if not os.path.exists(INPUT_FILE):
-        print(f"错误：未找到 {INPUT_FILE} 文件！")
+        print(f"未找到 {INPUT_FILE}")
         return
 
-    print("开始扫描，只保留 BPB Panel 版本 ≥ 2.5.3 的目标\n")
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-    }
-    min_ver = version.parse("2.5.3")
+    print(f"开始并行扫描（{THREADS} 线程），只保留 BPB Panel ≥ 2.5.3\n")
+    targets = []
+    with open(INPUT_FILE, encoding="utf-8") as f:
+        for line in f:
+            u = get_url(line)
+            if u: targets.append(u)
+
     hits = []
-
-    with open(INPUT_FILE, "r", encoding="utf-8") as f:
-        targets = [get_target_url(line) for line in f if get_target_url(line)]
-
-    total = len(targets)
-    for i, url in enumerate(targets, 1):
-        print(f"[{i}/{total}] {url}", end="  →  ")
-        try:
-            r = requests.get(url, headers=headers, timeout=12, verify=False, allow_redirects=True)
-            if r.status_code != 200:
-                print("状态码错误")
-                continue
-            if "BPB Panel" not in r.text and "bpbpanel" not in r.text.lower():
-                print("非BPB面板")
-                continue
-
-            ver = extract_version(r.text)
-            if ver and version.parse(ver) >= min_ver:
-                result = f"{url}  # 版本: {ver}"
-                print(f"命中！{ver}")
+    start = time.time()
+    with ThreadPoolExecutor(max_workers=THREADS) as pool:
+        future_to_url = {pool.submit(check_one, url): url for url in targets}
+        for i, future in enumerate(as_completed(future_to_url), 1):
+            result = future.result()
+            if result:
                 hits.append(result)
+                print(f"[{i}/{len(targets)}] 命中 → {result}")
             else:
-                print(f"版本过低 {ver or '无'}")
-        except Exception as e:
-            print(f"连接失败")
-        time.sleep(0.5)  # 友好扫描
+                print(f"[{i}/{len(targets)}] 未命中或超时", end="\r")
 
     # 保存结果
     with open(OK_FILE, "w", encoding="utf-8") as f:
-        for line in hits:
-            f.write(line + "\n")
+        for h in hits:
+            f.write(h + "\n")
 
-    print(f"\n扫描完成！共找到 {len(hits)} 个版本 ≥ 2.5.3 的目标")
-    print(f"结果已保存到：{OK_FILE}")
+    print(f"\n扫描完成！用时 {time.time()-start:.1f} 秒，共命中 {len(hits)} 个")
+    print(f"结果已保存 → {OK_FILE}")
 
 if __name__ == "__main__":
     main()
