@@ -22,7 +22,7 @@ jobs:
           python-version: '3.12'
 
       - name: Install deps
-        run: pip install requests packaging
+        run: pip install requests packaging tqdm
 
       - name: Run scanner
         run: python script.py
