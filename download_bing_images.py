@@ -3,11 +3,23 @@ import datetime
 import os
 import re
 
-# --- 配置 ---
+# --- V6.0 配置与市场优先级 ---
 # 1. API 基础 URL
 BING_API_URL_BASE = "https://www.bing.com/HPImageArchive.aspx?format=js&idx={}&n={}&mkt={}"
 
-# --- V5.2 最终合并版 MARKETS_TO_CHECK ---
+# 2. 【核心优化】定义市场优先级列表
+# 优先级：越靠前越高。当核心 ID (img_id) 冲突时，保留优先级最高的市场的元数据。
+# 越是内容独特的市场（如 zh-CN, ja-JP），优先级应越高。
+MARKET_PRIORITIES = [
+    "zh-CN", "ja-JP", "ko-KR",  # 亚洲独特内容（高优先级）
+    "en-US", "en-GB", "de-DE", "fr-FR", "es-ES", "it-IT", "pt-BR", "en-CA", "en-AU", # 主要国际市场
+    "en-IN", "es-MX", "ar-XA", "en-ZA", # 其他重要市场
+    # 所有未列出的市场将获得最低的优先级
+]
+PRIORITY_MAP = {market: i for i, market in enumerate(MARKET_PRIORITIES)}
+LOWEST_PRIORITY_RANK = len(MARKET_PRIORITIES) # 列表外的市场优先级
+
+# 3. V5.2 最终合并版 MARKETS_TO_CHECK (总共约 85 个)
 MARKETS_TO_CHECK = [
     # 亚洲及太平洋地区 (Asia/Pacific) - (约 35 个)
     "zh-CN", "zh-HK", "zh-TW", "ja-JP", "ko-KR", "en-IN", "en-AU", "en-NZ", "en-MY", 
@@ -31,15 +43,14 @@ MARKETS_TO_CHECK = [
 ]
 # -----------------------------------------------
 
-# 3. 【修改：下载历史图片的数量】
-# 将数量提高到 60，以获取大约过去两个月的去重图片
+# 4. 【修改：下载历史图片的数量】
 NUM_IMAGES_TO_FETCH = 60 
 
-# 4. 图片分辨率 (例如: 1920x1080)
+# 5. 图片分辨率 (例如: 1920x1080)
 RESOLUTION = "1920x1080"
-# 5. 目标文件夹 
+# 6. 目标文件夹 
 OUTPUT_DIR = "bing_images_global_unique" 
-# 6. 上海时区 (用于文件命名时间戳)
+# 7. 上海时区 (用于文件命名时间戳)
 SHANGHAI_TZ = datetime.timezone(datetime.timedelta(hours=8))
 # ----------------
 
@@ -63,6 +74,7 @@ def get_bing_data(market, index, count):
             return []
 
         images_data = data.get('images', [])
+        # 为每个图片数据添加市场来源标记
         for img in images_data:
             img['market_source'] = market
         
@@ -101,6 +113,7 @@ def get_chinese_titles(image_ids):
     zh_titles = {}
     for img_zh in images_data_zh:
         img_id = extract_unique_id(img_zh.get('urlbase', ''))
+        # title 是 '© XXXX (通过 XXXX)' 格式
         title = img_zh.get('copyright')
         if img_id and img_id in image_ids and title:
             zh_titles[img_id] = title
@@ -137,7 +150,7 @@ def download_image_unified(base_url, start_date, title, unique_image_id):
     
     # 核心去重检查：只要文件名相同，就跳过
     if os.path.exists(filepath):
-        print(f"File already exists: {filepath}. Skipping download.")
+        print(f"INFO: File already exists: {filepath}. Skipping download.")
         return False
         
     print(f"Downloading {title} to {filepath}")
@@ -152,20 +165,21 @@ def download_image_unified(base_url, start_date, title, unique_image_id):
         print(f"Successfully saved: {filepath}")
         return True
     except requests.RequestException as e:
-        print(f"Error downloading image {image_url}: {e}")
+        print(f"ERROR: Error downloading image {image_url}: {e}")
         return False
 
 def main():
-    """主函数 - 聚合多市场数据并【基于核心 ID】去重下载"""
+    """主函数 - 聚合多市场数据并【基于核心 ID 和优先级】去重下载"""
     
-    # 用于存储所有不重复图片的元数据
     # 键是 unique_image_id
     unique_images_map = {}
     
     print(f"Attempting to fetch {NUM_IMAGES_TO_FETCH} images from {len(MARKETS_TO_CHECK)} global markets.")
     
-    # 1. 遍历所有市场，收集数据并【记录最早的 fullstartdate】
+    # 1. 遍历所有市场，收集数据并【基于优先级进行智能覆盖】
     for market in MARKETS_TO_CHECK:
+        # 获取当前市场的优先级，如果未在列表中定义，则赋予最低优先级
+        current_priority = PRIORITY_MAP.get(market, LOWEST_PRIORITY_RANK) 
         images_data = get_bing_data(market, index=0, count=NUM_IMAGES_TO_FETCH)
         
         for img_data in images_data:
@@ -181,13 +195,24 @@ def main():
                     # 第一次发现，直接记录
                     unique_images_map[img_id] = img_data
                 else:
-                    # 第二次或之后发现，比较并记录更早的 fullstartdate
-                    existing_fullstartdate = unique_images_map[img_id].get('fullstartdate', '999999999999')
+                    # 第二次或之后发现，进行智能比较
+                    existing_data = unique_images_map[img_id]
+                    existing_market = existing_data.get('market_source', 'N/A')
+                    existing_priority = PRIORITY_MAP.get(existing_market, LOWEST_PRIORITY_RANK)
                     
-                    # 如果当前找到的 fullstartdate 更早（字符串比较即可）
-                    if current_fullstartdate < existing_fullstartdate:
-                        # 更新元数据，以使用包含最早 fullstartdate 的那个记录
+                    # 规则 A: 比较优先级。优先级数字越小，优先级越高。
+                    if current_priority < existing_priority:
+                        # 当前市场的优先级更高，直接覆盖旧数据
                         unique_images_map[img_id] = img_data
+                    
+                    # 规则 B: 如果优先级相同，则恢复到原来的“最早日期优先”逻辑
+                    elif current_priority == existing_priority:
+                        existing_fullstartdate = existing_data.get('fullstartdate', '999999999999')
+                        
+                        if current_fullstartdate < existing_fullstartdate:
+                            # 当前市场的日期更早，覆盖旧数据
+                            unique_images_map[img_id] = img_data
+                        # else: 日期更晚，保持现有数据不变
     
     # 检查是否获取到了数据
     if not unique_images_map:
@@ -195,13 +220,12 @@ def main():
         return
 
     # 2. 准备下载列表和获取中文标题 
-    images_to_download = list(unique_images_map.values())
     all_image_ids = set(unique_images_map.keys())
     
     # 获取中文标题映射
     zh_titles_map = get_chinese_titles(all_image_ids)
     
-    print(f"\nFound a total of {len(images_to_download)} unique images to process.")
+    print(f"\nFound a total of {len(unique_images_map)} unique images to process.")
     
     downloaded_count = 0
     
@@ -210,7 +234,8 @@ def main():
         hdate_str = img_data.get('startdate')
         utctime_str = img_data.get('fullstartdate')
         urlbase = img_data.get('urlbase')
-        
+        source_market = img_data.get('market_source', 'N/A') # 记录最终被选中的市场
+
         # 强制统一标题逻辑：优先使用中文标题，否则使用图片元数据中的 copyright
         default_title = img_data.get('copyright', 'bing_wallpaper_default')
         final_title = zh_titles_map.get(img_id, default_title) 
@@ -232,11 +257,14 @@ def main():
             # **【核心调用】**：传入提取出的 img_id
             if download_image_unified(urlbase, shanghai_datetime, final_title, img_id):
                 downloaded_count += 1
-                
+                print(f"INFO: Image ID {img_id} (Source: {source_market}) was successfully downloaded.")
+            else:
+                print(f"INFO: Image ID {img_id} (Source: {source_market}) skipped. File already exists or failed download.")
+
         except ValueError as e:
             print(f"Error parsing date/time for image {final_title}: {e}")
         
-    print(f"\nScript finished. Total unique images processed: {len(images_to_download)}. New images downloaded: {downloaded_count}")
+    print(f"\nScript finished. Total unique images processed: {len(unique_images_map)}. New images downloaded: {downloaded_count}")
 
 if __name__ == "__main__":
     main()
