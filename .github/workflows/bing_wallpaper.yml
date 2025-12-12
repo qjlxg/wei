@@ -13,7 +13,7 @@ on:
   # 定时触发：每日定时运行 (cron 表达式使用 UTC 时间)
 
   schedule:
-    - cron: '0 0 * * *'
+    - cron: '0 20 * * *'
 # 2. 环境变量 (用于确保 Git 提交时间戳和脚本的时区一致)
 env:
   TZ: Asia/Shanghai
