@@ -14,6 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      issues: write # 必须赋予写入 Issue 的权限
 
     steps:
       - name: Checkout
@@ -27,12 +28,25 @@ jobs:
       - name: Install Dependencies
         run: |
           sudo apt-get update
-          # 修复点：改用 libgl1 并添加更多图形支撑库
           sudo apt-get install -y libgl1 libglib2.0-0 libsm6 libxext6 libxrender1
           pip install requests beautifulsoup4 easyocr torch torchvision --extra-index-url https://download.pytorch.org/whl/cpu
 
       - name: Run Scraper
         run: python telegram_scraper.py
+
+      - name: Manage GitHub Issues
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # 1. 获取当前北京时间作为标题
+          REPORT_TITLE="📢 财经汇总报告 $(date -d '8 hours' +'%Y-%m-%d %H:%M')"
+          
+          # 2. 关闭带有 'daily-report' 标签的所有旧 Issue，防止堆积
+          gh issue list --label "daily-report" --json number --jq '.[].number' | xargs -I {} gh issue close {}
+          
+          # 3. 创建新的 Issue，并打上 'daily-report' 标签
+          # 如果标签不存在，gh 命令会自动创建它
+          gh issue create --title "$REPORT_TITLE" --body-file issue_body.md --label "daily-report"
 
       - name: Commit and Push
         run: |
