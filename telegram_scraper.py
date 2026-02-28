@@ -13,7 +13,7 @@ except:
     reader = None
 
 channels = [
-    'Jin10Data', 'kingkitay', 'FinanceNewsDaily', 
+    'Jin10Data', 'kingkitay','WorldSpotNews', 'FinanceNewsDaily', 
     'clsvip', 'zaobaocn', 'hgclhyyb', 'WorldSpotNews'
 ]
 
