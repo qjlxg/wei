@@ -12,7 +12,6 @@ on:
 jobs:
   run_scraper:
     runs-on: ubuntu-latest
-    # 显式声明权限，确保可以读写内容和 Issue
     permissions:
       contents: write
       issues: write
@@ -25,6 +24,18 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
+
+      # --- 新增：缓存 EasyOCR 模型文件 ---
+      - name: Cache EasyOCR models
+        uses: actions/cache@v4
+        with:
+          # EasyOCR 在 Linux 下默认存储路径是 ~/.EasyOCR
+          path: ~/.EasyOCR
+          # 使用系统名和模型名作为缓存 Key
+          key: ${{ runner.os }}-easyocr-models
+          restore-keys: |
+            ${{ runner.os }}-easyocr-models
+      # ----------------------------------
 
       - name: Install Dependencies
         run: |
@@ -39,19 +50,19 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # 1. 尝试创建标签（如果已存在会报错，用 || true 忽略）
+          # 1. 确保标签存在
           gh label create "daily-report" --color "FBCA04" --description "每日自动抓取报告" || true
           
           # 2. 获取当前北京时间标题
           REPORT_TITLE="📢 财经汇总报告 $(date -d '8 hours' +'%Y-%m-%d %H:%M')"
           
-          # 3. 关闭所有之前打开的带有 'daily-report' 标签的 Issue
+          # 3. 关闭所有之前打开的旧 Issue
           old_issues=$(gh issue list --label "daily-report" --state open --json number --jq '.[].number')
           for num in $old_issues; do
             gh issue close "$num"
           done
           
-          # 4. 创建新 Issue
+          # 4. 创建新 Issue 并发送提醒
           gh issue create --title "$REPORT_TITLE" --body-file issue_body.md --label "daily-report"
 
       - name: Commit and Push
@@ -59,5 +70,4 @@ jobs:
           git config --local user.email "action@github.com"
           git config --local user.name "Bot"
           git add README.md history/
-          # 检查是否有内容变更，有则提交
           git diff --quiet && git diff --staged --quiet || (git commit -m "Auto Update $(date -d '8 hours' +'%Y-%m-%d %H:%M')" && git push)
