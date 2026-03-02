@@ -7,7 +7,7 @@ on:
       - 'telegram_scraper.py'
       - '.github/workflows/telegram_scraper.yml'
   schedule:
-    - cron: '0 0,4,8,12,16 * * *'
+    - cron: '*/30 * * * *'
 
 jobs:
   run_scraper:
