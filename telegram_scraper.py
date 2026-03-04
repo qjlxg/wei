@@ -10,7 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 # 广告关键词黑名单：直接丢弃包含这些词的消息
 AD_KEYWORDS = [
     "极搜", "JISOU", "精准找到", "搜索引擎", "t.me/jisou",
-    "点击加入", "博彩", "开奖", "私推", "联系客服"
+    "点击加入", "博彩", "开奖", "私推", "普洱茶","联系客服"
 ]
 
 # 系统消息关键字：直接丢弃这些 Telegram 自动生成的文本
@@ -30,15 +30,11 @@ UA_LIST = [
 
 # --- 2. 频道列表 (保持完整，不精简) ---
 channels = [
-    'boombergzh', 'clsvip', 'FinanceNewsDaily', 'gainiantuhua', 'gsxt233', 
-    'guanshuitan', 'hejrb233', 'hejrb2333', 'hgclhyyb', 'Jin10Data', 
-    'kingkitay', 'metwarn', 'nysbsy', 'ok2tradecurrency', 'pelosi3', 
+    'clsvip', 'FinanceNewsDaily', 'hejrb233', 'hgclhyyb', 'Jin10Data', 
+    'kingkitay', 'metwarn', 'ok2tradecurrency', 'pelosi3', 
     'qzdzb', 'reuterszh', 'rsssubscibe', 'tnews365', 'WorldSpotNews', 
-    'ywcqdz', 'zaobaocn',
-    'BondMarketLive', 'CaixinGlobal', 'ChartLovers', 'CommodityPulse',
-    'DeepMacro', 'ForexFactory_News', 'FundFlowWatcher', 'FuturesEdge',
-    'Gavekal', 'IceBricks', 'PriceActionCN', 'QuantAnalysis',
-    'TradingView_ZH', 'WallStreetNews'
+    'ywcqdz', 'zaobaocn'
+    
 ]
 
 def get_channel_content(channel_name):
