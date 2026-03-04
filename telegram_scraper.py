@@ -63,7 +63,7 @@ UA_LIST = [
 #  2. 频道列表
 channels = [
     'metwarn','clsvip', 'FinanceNewsDaily', 'hejrb233', 'hgclhyyb', 'Jin10Data', 'kingkitay','ok2tradecurrency', 
-    'pelosi3',  'reuterszh', 'rsssubscibe', 'tnews365', 'WorldSpotNews', 'ywcqdz', 'zaobaocn'
+    'pelosi3',  'reuterszh','tnews365', 'WorldSpotNews', 'ywcqdz', 'zaobaocn'
     
 ]
 
