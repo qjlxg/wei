@@ -7,10 +7,21 @@ import random
 from concurrent.futures import ThreadPoolExecutor
 
 # --- 1. 过滤配置 ---
-# 广告关键词黑名单：直接丢弃包含这些词的消息
+
+# 广告关键词黑名单：针对资源频道、羊毛党、引流话术
 AD_KEYWORDS = [
+    # 你提供的特定引流话术
+    "每日分享B站各类课程", "及其它影视", "软件工具以及羊毛", "千奇百怪有趣的东西", 
+    "关注频道 👉", "https://t.me/hezuclub", "hezuclub",
+    
+    # 资源与引流常用词
     "极搜", "JISOU", "精准找到", "搜索引擎", "t.me/jisou",
-    "点击加入", "博彩", "开奖", "私推", "普洱茶","联系客服"
+    "点击加入", "博彩", "开奖", "私推", "普洱茶", "联系客服",
+    "进群", "加助理", "领取课件", "完整版后台", "看置顶",
+    
+    # 炒股/金融引流（结合你的 stock_names.csv 场景）
+    "盈利的朋友记得支持下", "加入桐城小花", "轻舟指标", "主力建仓提醒",
+    "盘中内参", "抓涨停公式", "实盘带单", "免费选股", "内幕消息"
 ]
 
 # 系统消息关键字：直接丢弃这些 Telegram 自动生成的文本
@@ -19,7 +30,20 @@ SYSTEM_PATTERNS = [
     "Channel name was changed", 
     "Channel photo updated",
     "Welcome to",
+    "pinned a message",
     "👋"
+]
+
+# 营销/导航类后缀
+NAVIGATION_PATTERNS = [
+    "导航 :  频道 | 群组 | VIP服务 | 带货",
+    "商务合作", "友情链接", "唯一官方频道", "唯一客服"
+]
+
+# 标签库（通常这些标签高频出现在垃圾消息底部）
+SPAM_TAGS = [
+    "#炒股笔记", "#交易记录", "#交易", "#模拟交易", 
+    "#轻舟指标", "#股票", "#股市", "#A股"
 ]
 
 # User-Agent 池
@@ -28,12 +52,10 @@ UA_LIST = [
     'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36'
 ]
 
-# --- 2. 频道列表 (保持完整，不精简) ---
+#  2. 频道列表
 channels = [
-    'clsvip', 'FinanceNewsDaily', 'hejrb233', 'hgclhyyb', 'Jin10Data', 
-    'kingkitay', 'metwarn', 'ok2tradecurrency', 'pelosi3', 
-    'qzdzb', 'reuterszh', 'rsssubscibe', 'tnews365', 'WorldSpotNews', 
-    'ywcqdz', 'zaobaocn'
+    'metwarn','clsvip', 'FinanceNewsDaily', 'hejrb233', 'hgclhyyb', 'Jin10Data', 'kingkitay','ok2tradecurrency', 
+    'pelosi3',  'reuterszh', 'rsssubscibe', 'tnews365', 'WorldSpotNews', 'ywcqdz', 'zaobaocn'
     
 ]
 
