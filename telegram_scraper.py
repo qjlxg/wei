@@ -13,10 +13,29 @@ except:
     reader = None
 
 channels = [
-    'Jin10Data', 'kingkitay','tnews365','kingkitay','WorldSpotNews', 'FinanceNewsDaily', 
-    'clsvip', 'zaobaocn', 'hgclhyyb', 'WorldSpotNews'
-]
+    # --- 原始频道  ---
+    'boombergzh', 'clsvip', 'FinanceNewsDaily', 'gainiantuhua', 'gsxt233', 
+    'guanshuitan', 'hejrb233', 'hejrb2333', 'hgclhyyb', 'Jin10Data', 
+    'kingkitay', 'metwarn', 'nysbsy', 'ok2tradecurrency', 'pelosi3', 
+    'qzdzb', 'reuterszh', 'rsssubscibe', 'tnews365', 'WorldSpotNews', 
+    'ywcqdz', 'zaobaocn',
 
+    # --- 新扩展的基金/股票/期货/技术观点频道 ---
+    'BondMarketLive',     # 债市动态
+    'CaixinGlobal',       # 财新深度观点
+    'ChartLovers',        # 技术走势分析
+    'CommodityPulse',     # 大宗商品/原油/黄金
+    'DeepMacro',          # 宏观研报
+    'ForexFactory_News',  # 外汇/宏观数据速报
+    'FundFlowWatcher',    # 基金/北向资金动向
+    'FuturesEdge',        # 期货/股指技术面
+    'Gavekal',            # 机构研究视角
+    'IceBricks',          # 深度财经科普
+    'PriceActionCN',      # 价格行为/裸K分析
+    'QuantAnalysis',      # 量化/因子分析
+    'TradingView_ZH',     # 社区高赞技术观点
+    'WallStreetNews'      # 华尔街见闻精选
+]
 def get_channel_content(channel_name):
     print(f"--- 正在处理: {channel_name} ---")
     url = f"https://t.me/s/{channel_name}"
