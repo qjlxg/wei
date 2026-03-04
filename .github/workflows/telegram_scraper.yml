@@ -25,23 +25,9 @@ jobs:
         with:
           python-version: '3.10'
 
-      # --- 新增：缓存 EasyOCR 模型文件 ---
-      - name: Cache EasyOCR models
-        uses: actions/cache@v4
-        with:
-          # EasyOCR 在 Linux 下默认存储路径是 ~/.EasyOCR
-          path: ~/.EasyOCR
-          # 使用系统名和模型名作为缓存 Key
-          key: ${{ runner.os }}-easyocr-models
-          restore-keys: |
-            ${{ runner.os }}-easyocr-models
-      # ----------------------------------
-
       - name: Install Dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libgl1 libglib2.0-0 libsm6 libxext6 libxrender1
-          pip install requests beautifulsoup4 easyocr torch torchvision --extra-index-url https://download.pytorch.org/whl/cpu
+          pip install requests beautifulsoup4
 
       - name: Run Scraper
         run: python telegram_scraper.py
@@ -50,19 +36,16 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # 1. 确保标签存在
           gh label create "daily-report" --color "FBCA04" --description "每日自动抓取报告" || true
-          
-          # 2. 获取当前北京时间标题
           REPORT_TITLE="📢 财经汇总报告 $(date -d '8 hours' +'%Y-%m-%d %H:%M')"
           
-          # 3. 关闭所有之前打开的旧 Issue
+          # 关闭旧 Issue
           old_issues=$(gh issue list --label "daily-report" --state open --json number --jq '.[].number')
           for num in $old_issues; do
             gh issue close "$num"
           done
           
-          # 4. 创建新 Issue 并发送提醒
+          # 创建新 Issue
           gh issue create --title "$REPORT_TITLE" --body-file issue_body.md --label "daily-report"
 
       - name: Commit and Push
