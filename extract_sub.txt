@@ -1,2 +1,4 @@
-ɢᴛᴀ ᴄʟᴏᴜᴅ: http://sub.xn--54qu5qypuo1o.xn--fiqs8s/cgi-bin/get/api/domain/ip/access?token=403dc9cc0a79ce96c96f19fdd86651b6
-ɢᴛᴀ ᴄʟᴏᴜᴅ: http://api2.xn--6krw3qs7jl59b.xn--55qx5d/cgi-bin/get/api/domain/ip/access?token=16a51e6966c096d57d178768cce26eee
+http://23.145.248.175:1145
+http://sub.xn--54qu5qypuo1o.xn--fiqs8s/
+http://gtacdnsub.work
+http://api2.xn--6krw3qs7jl59b.xn--55qx5d/
