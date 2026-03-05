@@ -1,0 +1,39 @@
+name: extract_sub
+
+on:
+  workflow_dispatch: # 支持手动运行
+  push:
+    paths:
+      - 'extract_sub.py'
+      - '.github/workflows/extract_sub.yml'
+  schedule:
+    - cron: '0 0 * * *' # 每日北京时间上午8点运行一次
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Download Trial Cache
+        run: |
+          curl -L -o trial.cache https://raw.githubusercontent.com/qjlxg/x.sub/refs/heads/main/trial.cache
+
+      - name: Run Extraction Script
+        run: python extract_sub.py
+
+      - name: Commit and Push Changes
+        env:
+          TZ: Asia/Shanghai
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add extract_sub.txt
+          # 只有在文件有变动时才提交
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Update subscription list $(date +'%Y-%m-%d %H:%M:%S')" && git push)
