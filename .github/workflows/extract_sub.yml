@@ -23,7 +23,7 @@ jobs:
 
       - name: Download Trial Cache
         run: |
-          curl -L -o trial.cache https://raw.githubusercontent.com/qjlxg/x.sub/refs/heads/main/trial.cache
+          curl -L -o trial.cache https://raw.githubusercontent.com/qjlxg/cheemsar/refs/heads/main/trial.cache
 
       - name: Run Extraction Script
         run: python extract_sub.py
