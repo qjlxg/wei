@@ -47,7 +47,7 @@ UA_LIST = [
 
 channels = [
     'metwarn','kingkitay','clsvip', 'FinanceNewsDaily', 'hejrb233', 'hgclhyyb', 'Jin10Data', 'qqgsrgb', 
-    'ok2tradecurrency', 'pelosi3', 'reuterszh', 'tnews365', 'WorldSpotNews', 'ywcqdz', 'zaobaocn'
+    'ok2tradecurrency', 'pelosi3', 'reuterszh', 'tnews365', 'WorldSpotNews', 'ywcqdz'
 ]
 
 def get_channel_content(channel_name):
