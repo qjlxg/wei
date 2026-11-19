@@ -28,7 +28,7 @@ jobs:
       - name: ⬇️ Checkout Repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # 获取所有历史记录，用于后续 Git 操作
+          fetch-depth: 1 # 获取所有历史记录，用于后续 Git 操作
       # 步骤 2: 设置 Python 环境
       - name: ⚙️ Set up Python
         uses: actions/setup-python@v4
